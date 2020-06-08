@@ -1,0 +1,8 @@
+/diseaseFrequency EBOLA 01-01-2000 01-01-2008 USA
+/diseaseFrequency FLU 01-01-2000 01-01-2008
+/topkAgeRanges 2 Germany COVID-19 01-01-2000 01-01-2008
+/searchPatientRecord 43
+/numPatientAdmissions SARS 01-01-2000 01-01-2008 Greece
+/numPatientAdmissions SARS 01-01-2000 01-01-2008
+/numPatientDischarges SARS 01-01-2000 01-01-2008 Greece
+/numPatientDischarges SARS 01-01-2000 01-01-2008

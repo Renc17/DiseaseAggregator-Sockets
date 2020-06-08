@@ -1,0 +1,48 @@
+#ifndef _HASHTABLE_H
+#define _HASHTABLE_H
+
+#include <stdio.h>
+#include "RedBlackTree.h"
+#include "List.h"
+
+typedef struct {
+    char* name;
+    RBT* RBTptr;
+    RBT* TNILL;
+}Value;
+
+typedef struct Bucket{
+    Value* value;
+    struct Bucket *nextBacket;
+}Bucket;
+
+typedef struct HashTable{
+    Bucket *buckets;
+    Bucket *last;
+}HashTable;
+
+typedef struct {
+    char category[10];
+    int count;
+}topkArray;
+
+HashTable *InitHashTable(int numOfEntries);
+int hashFunc(char* hashValue,int entries);
+Bucket* newbucket(char* hashValue, patientRecord* patient);
+void insertPatientHT(HashTable *h, char* hashValue, int entries, patientRecord *patient);
+void printHashTable(HashTable* h, int entries, FILE* fd);
+void getStatistics(HashTable* h, int entries, char* filename, char *dirname, int push_fd, int bufferSize);
+void DestroyHashTable(HashTable* h, int entries);
+
+
+void listCountries(int push_fd, char** Countries, int numOfCountries, int child_id);
+void diseaseFrequency(int push_fd, char *disease, char* date1, char* date2, char* country, HashTable* h, int entries);
+void topkAgeRanges(int push_fd, HashTable* h, int entries, int k, char* country, char* disease, char* date1, char* date2);
+void searchPatientRecord(int push_fd, char* id, RecordList* list);
+void numPatientAdmissions(int push_fd, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2);
+void numPatientDischarges(int push_fd, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2);
+void Exit(HashTable* h1, HashTable* h2, int entries, RecordList* list);
+
+void Sort (topkArray *array) ;
+
+#endif
