@@ -30,8 +30,8 @@ HashTable *InitHashTable(int numOfEntries);
 int hashFunc(char* hashValue,int entries);
 Bucket* newbucket(char* hashValue, patientRecord* patient);
 void insertPatientHT(HashTable *h, char* hashValue, int entries, patientRecord *patient);
-void printHashTable(HashTable* h, int entries, FILE* fd);
-void getStatistics(HashTable* h, int entries, char* filename, char *dirname, int push_fd, int bufferSize);
+void printHashTable(HashTable* h, int entries);
+void getStatistics(HashTable* h, int entries, char* filename, char *dirname, int push_fd);
 void DestroyHashTable(HashTable* h, int entries);
 
 

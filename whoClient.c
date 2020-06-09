@@ -18,7 +18,7 @@ char *servIP;
 
 int main(int argc, char** argv){
 
-    char* queryFile = 0;
+    char* queryFile = NULL;
     int numThreads = 0;
 
     int i = 0;
@@ -72,33 +72,34 @@ int main(int argc, char** argv){
         queries = realloc(queries, sizeof(char *) * numQuery);
         queries[numQuery - 1] = malloc(sizeof(char) * strlen(buffer) + 1);
         strcpy(queries[numQuery - 1], buffer);
+        printf("Buffer %s", buffer);
     }
     fclose(fd);
 
     i = 0;
     int k = 0;
-    //while (i < numQuery) {
+    while (i < numQuery) {
         for (int j = 0; j < numThreads; ++j) {
-        //    if (i < numQuery) {
+            if (i < numQuery) {
                 printf("Creating %d thread, i : %d\n", j, i);
                 if ((err = pthread_create(&thr[j], NULL, Client, (void *) queries[i]))) {
                     printf("Invalid : pthread_create %d\n", err);
                     exit(1);
                 }
-        //        i++;
-        //    }
+                i++;
+            }
         }
         for (int j = 0; j < numThreads; j++) {
-        //    if(k < i){
+            if(k < i){
                 printf("Waiting for %d thread, k : %d\n", j, k);
                 if ((err = pthread_join(*(thr + j), NULL))) {
                     printf("Invalid : pthread_join %d\n", err);
                     exit(1);
                 }
-        //        k++;
-        //    }
+                k++;
+            }
         }
-   // }
+    }
 
     printf("Original thread exiting\n");
 
@@ -114,39 +115,42 @@ void *Client(void *query){
 
     printf("%ld : Query %s", pthread_self(),(char *) query);
 
-    struct hostent* serverHost;
-    struct in_addr myaddress;
-    inet_aton(servIP, &myaddress);
-    serverHost=gethostbyaddr((const char*)&myaddress, sizeof(myaddress), AF_INET);
+//    struct hostent* serverHost;
+//    struct in_addr myaddress;
+//    inet_aton(servIP, &myaddress);
+//    serverHost=gethostbyaddr((const char*)&myaddress, sizeof(myaddress), AF_INET);
+//
+//    if (serverHost!=NULL){
+//        printf("IP-address: Resolved to: %s\n", serverHost->h_name);
+//    } else{
+//        printf("IP-address: could not be resolved\n");
+//        exit(1);
+//    }
+//
+//    if(serverHost->h_addrtype !=  AF_INET) {
+//        perror("unknown address type");
+//        exit(1);
+//    }
 
-    if (serverHost!=NULL){
-        printf("IP-address: Resolved to: %s\n", serverHost->h_name);
-    } else{
-        printf("IP-address: could not be resolved\n");
-        exit(1);
-    }
     int sockfd;
     struct sockaddr_in server, client;
 
-    server.sin_family = AF_INET;        /* Internet domain */
+    //Setup Server
+    server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(servIP);
     server.sin_port = htons(servPort);
 
     /* Create socket */
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("socket"); exit(1); }
+
     /* Setup my address */
     client.sin_family = AF_INET;        /* Internet domain */
     client.sin_addr.s_addr=htonl(INADDR_ANY); /*Any address*/
     client.sin_port = htons(0);         /* Autoselect port */
+
     if (bind(sockfd, (struct sockaddr *) &client, sizeof(client)) < 0) {
         perror("bind"); exit(1); }
-
-
-    if(serverHost->h_addrtype !=  AF_INET) {
-        perror("unknown address type");
-        exit(1);
-    }
 
     /* open a TCP socket */
     if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -162,11 +166,11 @@ void *Client(void *query){
 
     /* write a message to the server */
     write(sockfd, query, strlen(query)+1);
-    char *buf = malloc(sizeof(char )*50);
-    if (recvfrom(sockfd, buf, sizeof(buf), 0, NULL, NULL) < 0) {
-        perror("recvfrom"); exit(1); }    /* Receive message */
-    printf("%s\n", buf);
-    free(buf);
+    //char *buf = malloc(sizeof(char )*50);
+    //if (recvfrom(sockfd, buf, sizeof(buf), 0, NULL, NULL) < 0) {
+    //    perror("recvfrom"); exit(1); }    /* Receive message */
+    //printf("%s\n", buf);
+    //free(buf);
 
     close(sockfd);
     pthread_exit(NULL);

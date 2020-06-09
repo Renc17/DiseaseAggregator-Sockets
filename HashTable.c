@@ -78,25 +78,25 @@ void DestroyHashTable(HashTable* h, int entries){
     }
 }
 
-void printHashTable(HashTable* h, int entries, FILE* fd){
+void printHashTable(HashTable* h, int entries){
     for (int i = 0; i < entries; ++i) {
         if(h[i].buckets != NULL){
             Bucket *currentBucket = h[i].buckets;
-            fprintf(fd, "Buckets %d : \n", i);
+            printf("Buckets %d : \n", i);
             while(currentBucket != NULL) {
-                fprintf(fd,"%s\n", currentBucket->value->name);
-                print(currentBucket->value->RBTptr, currentBucket->value->TNILL, fd);
+                printf("%s\n", currentBucket->value->name);
+                print(currentBucket->value->RBTptr, currentBucket->value->TNILL);
                 currentBucket = currentBucket->nextBacket;
             }
-            fprintf(fd,"\n");
+            printf("\n");
         }
     }
 }
 
-void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int push_fd, int bufferSize){
+void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int push_fd){
 
-    char *statMessage = malloc(sizeof(char)*50);
-    memset(statMessage, '\0', sizeof(char)*50);
+    char statMessage[80];
+    memset(statMessage, '\0', sizeof(statMessage));
 
     char num[10];
 
@@ -104,10 +104,9 @@ void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int
     strcat(statMessage, "\n");
     strcat(statMessage, filename);
     strcat(statMessage, "\n");
-//    printf("%s\n%s\n", dirname, filename);
 
-    write(push_fd, statMessage, bufferSize);
-    memset(statMessage, '\0', sizeof(char)*50);
+    write(push_fd, statMessage, sizeof(statMessage));
+    memset(statMessage, '\0', sizeof(statMessage));
 
     int categories[4];
     for (int j = 0; j < 4; ++j) {
@@ -121,8 +120,8 @@ void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int
                 strcat(statMessage, currentBucket->value->name);
                 //printf("%s\n", currentBucket->value->name);
                 strcat(statMessage, "\n");
-                write(push_fd, statMessage, bufferSize);
-                memset(statMessage, '\0', sizeof(char)*50);
+                write(push_fd, statMessage, sizeof(statMessage));
+                memset(statMessage, '\0', sizeof(statMessage));
 
 
                 statistics(currentBucket->value->RBTptr, currentBucket->value->TNILL, categories);
@@ -131,36 +130,34 @@ void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int
                 sprintf(num, "%d cases\n", categories[0]);
                 strcat(statMessage, num);
                  //printf("Age range 0-20 years: %d\n", categories[0]);
-                write(push_fd, statMessage, bufferSize);
-                memset(statMessage, '\0', sizeof(char)*50);
+                write(push_fd, statMessage, sizeof(statMessage));
+                memset(statMessage, '\0', sizeof(statMessage));
 
                 strcat(statMessage, "Age range 21-40 years: ");
                 sprintf(num, "%d cases\n", categories[1]);
                 strcat(statMessage, num);
                 //printf("Age range 21-40 years: %d\n", categories[1]);
-                write(push_fd, statMessage, bufferSize);
-                memset(statMessage, '\0', sizeof(char)*50);
+                write(push_fd, statMessage, sizeof(statMessage));
+                memset(statMessage, '\0', sizeof(statMessage));
 
                 strcat(statMessage, "Age range 41-60 years: ");
                 sprintf(num, "%d cases\n", categories[2]);
                 strcat(statMessage, num);
                 //printf("Age range 41-60 years: %d\n", categories[2]);
-                write(push_fd, statMessage, bufferSize);
-                memset(statMessage, '\0', sizeof(char)*50);
+                write(push_fd, statMessage, sizeof(statMessage));
+                memset(statMessage, '\0', sizeof(statMessage));
 
                 strcat(statMessage, "Age range 60+ years: ");
                 sprintf(num, "%d cases\n", categories[3]);
                 strcat(statMessage, num);
                 //printf("Age range 60+ years: %d\n", categories[2]);
-                write(push_fd, statMessage, bufferSize);
-                memset(statMessage, '\0', sizeof(char)*50);
-
+                write(push_fd, statMessage, sizeof(statMessage));
+                memset(statMessage, '\0', sizeof(statMessage));
 
                 currentBucket = currentBucket->nextBacket;
             }
         }
     }
-    free(statMessage);
 }
 
 //########## QUERY ##########//

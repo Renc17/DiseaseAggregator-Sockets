@@ -11,6 +11,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 int fail = 0;
 int success = 0;
@@ -18,7 +20,7 @@ int numofDir = 0;
 char **DirList = NULL;
 
 
-void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int push, int bufferSize);
+void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int socketFd);
 void EnterPatientRecord(RecordList* list, HashTable* disease, HashTable* Country, HashTable* stat, int entries, char* date, patientRecord* patient, char* dirName);
 void SortFiles (char **FileList, int numOfFiles);
 void signal_handler(int sig);
@@ -43,6 +45,11 @@ int main(int argc, char** argv) {
     }
 
     int bufferSize = atoi(argv[2]);
+    int serverPort = atoi(argv[3]);  //Statistics Server port
+    char *serverIp = argv[4];
+
+    printf("Port : %d , Ip : %s\n", serverPort, serverIp);
+
     char *buf = malloc(sizeof(char) * bufferSize);
     char *message = malloc(sizeof(char) * 512);
     memset(message, '\0', sizeof(char) * 512);
@@ -72,6 +79,47 @@ int main(int argc, char** argv) {
             }
             memset(buf, '\0', sizeof(char) * bufferSize);
         }
+    }
+
+    //read(readfd, buf, bufferSize);
+    //char *serverPort = malloc(sizeof(char )*bufferSize);
+    //strcpy(serverPort, buf);
+    //printf("ServerPort : %s\n", serverPort);
+    //read(readfd, buf, bufferSize);
+    //char *serverIp = malloc(sizeof(char )*bufferSize);
+    //strcpy(serverIp, buf);
+    //printf("ServerIp : %s\n", serverIp);
+
+    int sockfd;
+    struct sockaddr_in server, client;
+
+    //Setup Server
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = inet_addr(serverIp);
+    server.sin_port = htons(serverPort);
+
+    /* Create socket */
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("socket"); exit(1); }
+
+    /* Setup my address */
+    //client.sin_family = AF_INET;        /* Internet domain */
+    //client.sin_addr.s_addr=htonl(INADDR_ANY); /*Any address*/
+    //client.sin_port = htons(0);         /* Autoselect port */
+
+    //if (bind(sockfd, (struct sockaddr *) &client, sizeof(client)) < 0) {
+    //    perror("bind"); exit(1); }
+
+    /* open a TCP socket */
+    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("can't open stream socket");
+        exit(1);
+    }
+
+    /* connect to the server */
+    if(connect(sockfd, (struct sockaddr *) &server, sizeof(server)) < 0) {
+        perror("can't connect to server");
+        exit(1);
     }
 
     RecordList *Records = initList();           //list that stores all the patients
@@ -120,7 +168,7 @@ int main(int argc, char** argv) {
                 return -1;
             }
 
-            updateStucts(fd, Records, RecordsByDisease, RecordsByCountry, FilePerDir[j], DirList[i], writefd, bufferSize);
+            updateStucts(fd, Records, RecordsByDisease, RecordsByCountry, FilePerDir[j], DirList[i], sockfd);
 
             fclose(fd);
 
@@ -136,7 +184,14 @@ int main(int argc, char** argv) {
     }
     free(FilePerDir);
 
-    write(writefd, "done", bufferSize);
+    char done[10];
+    memset(done, '\0', sizeof(done));
+    strcpy(done, "done");
+    write(sockfd, done, sizeof(done));
+
+    close(sockfd);
+
+    Exit(RecordsByDisease,RecordsByCountry, 23, Records);
     close(writefd);
     close(readfd);
 
@@ -192,7 +247,7 @@ void make_logfile() {
     fclose(logFile);
 }
 
-void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int push, int bufferSize){
+void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int socketFd){
 
     size_t lineSize = 200;
     char *token;
@@ -233,7 +288,7 @@ void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, Ha
 
         EnterPatientRecord(Records, RecordsByDisease, RecordsByCountry, Stats, 23, filename, patient, dirname);
     }
-    //getStatistics(Stats, 23, filename, dirname, push, bufferSize);    //categorize and push to pipe the file statistics
+    getStatistics(Stats, 23, filename, dirname, socketFd);    //categorize and push to pipe the file statistics
     DestroyHashTable(Stats, 23);
     free(Stats);
     free(buffer);

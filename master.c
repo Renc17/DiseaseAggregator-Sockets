@@ -14,15 +14,15 @@ int success = 0;
 int numofDir = 0;
 char **DirList = NULL;
 
+//./master –w numWorkers -b bufferSize –s serverIP  –p serverPort -i input_dir
 int main(int argc, char** argv) {
-
-
     printf("DiseaseAggregator pid %d\n", getpid());
 
     char *input_dir = NULL;
     int numWorkers = 0;
     int bufferSize = 0;
-    int bytesIn = 0;
+    char *serverIp = NULL;
+    char *serverPort = NULL;
 
     int i = 0;
     while (argv[i] != NULL && strcmp(argv[i], "-i") != 0) {
@@ -41,6 +41,22 @@ int main(int argc, char** argv) {
         i++;
     }
     numWorkers = atoi(argv[i + 1]);
+    printf("Master : numWorkers : %d\n", numWorkers);
+
+    i = 0;
+    while (argv[i] != NULL && strcmp(argv[i], "-s") != 0) {
+        i++;
+    }
+    serverIp = argv[i+1];
+    printf("Master : serverIp : %s\n", serverIp);
+
+    i = 0;
+    while (argv[i] != NULL && strcmp(argv[i], "-p") != 0) {
+        i++;
+    }
+    serverPort = argv[i+1];
+    printf("Master : serverPort : %s\n", serverPort);
+
 
     pid_t pid[numWorkers];
     pid_t wait_child_id;
@@ -54,7 +70,7 @@ int main(int argc, char** argv) {
         if ((pid[i] = fork()) == 0) {
             char b[4];
             sprintf(b, "%d", bufferSize);
-            if (0 > (execlp("./Worker", "./Worker", input_dir, b, (char *) NULL))) {
+            if (0 > (execlp("./Worker", "./Worker", input_dir, b, serverPort, serverIp, (char *) NULL))) {
                 printf("Exec failed\n");
             }
         }
@@ -77,7 +93,6 @@ int main(int argc, char** argv) {
             perror("server: can't open write fifo");
         }
         //printf("Parent writing in pipe %d\n", write_fd[i]);
-
     }
 
     DIR *d;
@@ -96,9 +111,6 @@ int main(int argc, char** argv) {
 
     i = 0;
     int flag = 0;
-    char delim[3];
-    strcpy(delim, "\n&");
-
     DirList = malloc(sizeof(char *) * numofDir);
 
     while ((dir = readdir(d)) != NULL) {    //read input_dir and deliver the directories to the workers throw the pipe
@@ -107,7 +119,7 @@ int main(int argc, char** argv) {
         } else {
             directory[i] = malloc(strlen(dir->d_name)+1);
             strcpy(directory[i], dir->d_name);
-            char *writeDir = malloc(bufferSize);
+            char *writeDir = malloc(bufferSize*sizeof(char ));
             memset(writeDir, '\0', sizeof(char )* bufferSize);
             strcpy(writeDir, directory[i]);
             write(write_fd[i], writeDir, bufferSize);
@@ -159,6 +171,7 @@ int main(int argc, char** argv) {
     }
 
     closedir(d);
+
 
     while ((wait_child_id = wait(&status)) > 0);
 
