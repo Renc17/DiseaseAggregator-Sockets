@@ -162,36 +162,14 @@ void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int
 
 //########## QUERY ##########//
 
-void listCountries(int push_fd, char** Countries, int numOfCountries, int child_id) {
-    char *message = malloc(sizeof(char)*100);
-    memset(message, '\0', sizeof(char)*100);
-    char id[10];
+void diseaseFrequency(char *answer, char *disease, char* date1, char* date2, char* country, HashTable* h, int entries){
+    char asw[100];
+    memset(asw, '\0', sizeof(asw));
 
-    char delim[2];
-    strcpy(delim, "&");
-
-    sprintf(id, " %d\n", child_id);
-    for (int i = 0; i < numOfCountries; i++) {
-        strcat(message, Countries[i]);
-        strcat(message, id);
-    }
-
-    strcat(message, delim);
-    write(push_fd, message, strlen(message)+1);
-    free(message);
-}
-
-void diseaseFrequency(int push_fd, char *disease, char* date1, char* date2, char* country, HashTable* h, int entries){
-    char *asw = malloc(sizeof(char)*100);
-    memset(asw, '\0', sizeof(char)*100);
-    char delim[2];
-    strcpy(delim, "&");
     if(country == NULL){
         int key = hashFunc(disease, entries);
         if(h[key].buckets == NULL){
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+            strcpy(answer, "Error");
             return;
         } else {
             Bucket *currentBucket = h[key].buckets;
@@ -200,26 +178,21 @@ void diseaseFrequency(int push_fd, char *disease, char* date1, char* date2, char
                     int count = 0;
                     countPatients(currentBucket->value->RBTptr, currentBucket->value->TNILL, date1, date2, &count);
                     char c[6];
+                    memset(asw, '\0', sizeof(c));
                     sprintf(c, "%d\n", count);
                     strcat(asw, c);
-                    strcat(asw, delim);
-                    write(push_fd, asw, strlen(asw)+1);
-                    free(asw);
+                    strcpy(answer, asw);
                     return;
                 }
                 currentBucket = currentBucket->nextBacket;
             }
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+            strcpy(answer, "Error");
             //printf("ERROR : No such disease in records\n");
         }
     } else {
         int key = hashFunc(country, entries);
         if(h[key].buckets == NULL){
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+            strcpy(answer, "Error");
             return;
         } else {
             Bucket *currentBucket = h[key].buckets;
@@ -230,28 +203,24 @@ void diseaseFrequency(int push_fd, char *disease, char* date1, char* date2, char
                     char c[6];
                     sprintf(c, "%d\n", count);
                     strcat(asw, c);
-                    strcat(asw, delim);
-                    write(push_fd, asw, strlen(asw)+1);
-                    free(asw);
+                    strcpy(answer, asw);
                     return;
                 }
                 currentBucket = currentBucket->nextBacket;
             }
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+            strcpy(answer, "Error");
             //printf("ERROR : No such country in records\n");
         }
     }
 }
 
-void searchPatientRecord(int push_fd, char* id, RecordList* list){
+void searchPatientRecord(char *answer, char* id, RecordList* list){
     Records* patient = findId(list, id);
+
     if(patient != NULL) {
-        char delim[2];
-        strcpy(delim, "&");
-        char *asw = malloc(sizeof(char)*100);
-        memset(asw, '\0', sizeof(char)*100);
+
+        char asw[100];
+        memset(asw, '\0', sizeof(asw));
 
         strcat(asw, patient->patient->recordId);
         strcat(asw," ");
@@ -267,22 +236,17 @@ void searchPatientRecord(int push_fd, char* id, RecordList* list){
         strcat(asw," ");
         strcat(asw, patient->patient->Date->exitDate);
         strcat(asw,"\n");
-        strcat(asw, delim);
 
-        write(push_fd, asw, strlen(asw)+1);
-        free(asw);
+        strcpy(answer, asw);
     } else{
-        char error[7];
-        strcpy(error, "Error&");
-        write(push_fd, error, strlen(error)+1);
+        strcpy(answer, "Error");
     }
 }
 
-void numPatientAdmissions(int push_fd, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2){
-    char delim[2];
-    strcpy(delim, "&");
-    char *asw = malloc(sizeof(char)*100);
-    memset(asw, '\0', sizeof(char)*100);
+void numPatientAdmissions(char *answer, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2){
+    char asw[100];
+    memset(asw, '\0', sizeof(asw));
+
 
     if(country == NULL){
         for (int i = 0; i < entries; ++i) {
@@ -294,20 +258,18 @@ void numPatientAdmissions(int push_fd, HashTable* h, int entries, char* country,
                     countPatientsAdmissionByDisease(currentBucket->value->RBTptr, currentBucket->value->TNILL, date1, date2, &count, disease);
                     currentBucket = currentBucket->nextBacket;
                     char c[7];
+                    memset(c, '\0', sizeof(c));
                     sprintf(c, " %d\n", count);
                     strcat(asw, c);
                 }
             }
         }
-        strcat(asw, delim);
-        write(push_fd, asw, strlen(asw)+1);
-        free(asw);
+
+        strcpy(answer, asw);
     } else{
         int key = hashFunc(country, entries);
         if(h[key].buckets == NULL){
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+            strcpy(answer, "Error");
             return;
         } else {
             Bucket *currentBucket = h[key].buckets;
@@ -317,28 +279,25 @@ void numPatientAdmissions(int push_fd, HashTable* h, int entries, char* country,
                     int count = 0;
                     countPatientsAdmissionByDisease(currentBucket->value->RBTptr, currentBucket->value->TNILL, date1, date2, &count, disease);
                     char c[7];
+                    memset(c, '\0', sizeof(c));
                     sprintf(c, " %d\n", count);
                     strcat(asw, c);
-                    strcat(asw, delim);
-                    write(push_fd, asw, strlen(asw)+1);
-                    free(asw);
+                    strcpy(answer, asw);
                     return;
                 }
                 currentBucket = currentBucket->nextBacket;
             }
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+
+            strcpy(answer, "Error");
             //printf("ERROR : No such disease in records\n");
         }
     }
 }
 
-void numPatientDischarges(int push_fd, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2){
-    char *asw = malloc(sizeof(char)*100);
-    memset(asw, '\0', sizeof(char)*100);
-    char delim[2];
-    strcpy(delim, "&");
+void numPatientDischarges(char *answer, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2){
+
+    char asw[100];
+    memset(asw, '\0', sizeof(asw));
 
     if(country == NULL){
         for (int i = 0; i < entries; ++i) {
@@ -355,15 +314,12 @@ void numPatientDischarges(int push_fd, HashTable* h, int entries, char* country,
                 }
             }
         }
-        strcat(asw ,delim);
-        write(push_fd, asw, strlen(asw)+1);
-        free(asw);
+        strcpy(answer, asw);
     } else{
         int key = hashFunc(country, entries);
         if(h[key].buckets == NULL){
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+
+            strcpy(answer, "Error");
             //printf("ERROR : No such country found\n");
             return;
         } else {
@@ -374,18 +330,16 @@ void numPatientDischarges(int push_fd, HashTable* h, int entries, char* country,
                     int count = 0;
                     countPatientsDischargeByDisease(currentBucket->value->RBTptr, currentBucket->value->TNILL, date1, date2, &count, disease);
                     char c[7];
+                    memset(c, '\0', sizeof(c));
                     sprintf(c, " %d\n", count);
                     strcat(asw, c);
-                    strcat(asw ,delim);
-                    write(push_fd, asw, strlen(asw)+1);
-                    free(asw);
+                    strcpy(answer, asw);
                     return;
                 }
                 currentBucket = currentBucket->nextBacket;
             }
-            char error[7];
-            strcpy(error, "Error&");
-            write(push_fd, error, strlen(error)+1);
+
+            strcpy(answer, "Error");
             //printf("ERROR : No such disease in records\n");
         }
     }
@@ -397,7 +351,10 @@ void Exit(HashTable* h1, HashTable* h2, int entries, RecordList* list){
     ListDelete(list);
 }
 
-void topkAgeRanges(int push_fd, HashTable* h, int entries, int k, char* country, char* disease, char* date1, char* date2){
+void topkAgeRanges(char *answer, HashTable* h, int entries, int k, char* country, char* disease, char* date1, char* date2){
+    char asw[100];
+    memset(asw, '\0', sizeof(asw));
+
     int categories[4];
     for (int j = 0; j < 4; ++j) {
         categories[j] = 0;
@@ -423,32 +380,23 @@ void topkAgeRanges(int push_fd, HashTable* h, int entries, int k, char* country,
                 Sort(array);
 
                 char top[10];
-                char delim[2];
-                strcpy(delim, "&");
-
-                char* answer = malloc(sizeof(char)*100);
-                memset(answer, '\0', sizeof(char)*100);
 
                 int result;
                 for (int i = 0; i < k; ++i) {
                     result = (array[i].count * 100) / count;
                     sprintf(top, " : %d%%\n", result);
-                    strcat(answer, array[i].category);
-                    strcat(answer, top);
+                    strcat(asw, array[i].category);
+                    strcat(asw, top);
                 }
 
-                strcat(answer, delim);
-                write(push_fd, answer, strlen(answer)+1);
-                free(answer);
+                strcpy(answer, asw);
                 free(array);
                 return;
             }
             currentBucket = currentBucket->nextBacket;
         }
     }
-    char error[7];
-    strcpy(error, "Error&");
-    write(push_fd, error, strlen(error)+1);
+    strcpy(answer, "Error");
 }
 
 void Sort (topkArray *array) {

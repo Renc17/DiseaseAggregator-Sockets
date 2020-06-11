@@ -78,28 +78,28 @@ int main(int argc, char** argv){
 
     i = 0;
     int k = 0;
-    while (i < numQuery) {
+    //while (i < numQuery) {
         for (int j = 0; j < numThreads; ++j) {
-            if (i < numQuery) {
+            //if (i < numQuery) {
                 printf("Creating %d thread, i : %d\n", j, i);
                 if ((err = pthread_create(&thr[j], NULL, Client, (void *) queries[i]))) {
                     printf("Invalid : pthread_create %d\n", err);
                     exit(1);
                 }
-                i++;
-            }
+             //   i++;
+            //}
         }
         for (int j = 0; j < numThreads; j++) {
-            if(k < i){
+            //if(k < i){
                 printf("Waiting for %d thread, k : %d\n", j, k);
                 if ((err = pthread_join(*(thr + j), NULL))) {
                     printf("Invalid : pthread_join %d\n", err);
                     exit(1);
                 }
-                k++;
-            }
+             //   k++;
+           // }
         }
-    }
+   // }
 
     printf("Original thread exiting\n");
 
@@ -113,65 +113,52 @@ int main(int argc, char** argv){
 
 void *Client(void *query){
 
-    printf("%ld : Query %s", pthread_self(),(char *) query);
+    printf("%ld Query : %s", pthread_self(), (char *) query);
 
-//    struct hostent* serverHost;
-//    struct in_addr myaddress;
-//    inet_aton(servIP, &myaddress);
-//    serverHost=gethostbyaddr((const char*)&myaddress, sizeof(myaddress), AF_INET);
-//
-//    if (serverHost!=NULL){
-//        printf("IP-address: Resolved to: %s\n", serverHost->h_name);
-//    } else{
-//        printf("IP-address: could not be resolved\n");
-//        exit(1);
-//    }
-//
-//    if(serverHost->h_addrtype !=  AF_INET) {
-//        perror("unknown address type");
-//        exit(1);
-//    }
-
-    int sockfd;
-    struct sockaddr_in server, client;
+    int socketFd;
+    struct sockaddr_in server;
 
     //Setup Server
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(servIP);
     server.sin_port = htons(servPort);
-
-    /* Create socket */
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("socket"); exit(1); }
-
-    /* Setup my address */
-    client.sin_family = AF_INET;        /* Internet domain */
-    client.sin_addr.s_addr=htonl(INADDR_ANY); /*Any address*/
-    client.sin_port = htons(0);         /* Autoselect port */
-
-    if (bind(sockfd, (struct sockaddr *) &client, sizeof(client)) < 0) {
-        perror("bind"); exit(1); }
+    printf("Client : Port : %d Ip : %d\n", servPort, server.sin_addr.s_addr);
 
     /* open a TCP socket */
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("can't open stream socket");
         exit(1);
     }
 
+    printf("Client : Waiting to connect to server\n");
     /* connect to the server */
-    if(connect(sockfd, (struct sockaddr *) &server, sizeof(server)) < 0) {
+    if((connect(socketFd, (struct sockaddr *) &server, sizeof(server))) < 0){
         perror("can't connect to server");
         exit(1);
     }
 
     /* write a message to the server */
-    write(sockfd, query, strlen(query)+1);
-    //char *buf = malloc(sizeof(char )*50);
-    //if (recvfrom(sockfd, buf, sizeof(buf), 0, NULL, NULL) < 0) {
-    //    perror("recvfrom"); exit(1); }    /* Receive message */
-    //printf("%s\n", buf);
-    //free(buf);
+    char q[80];
+    bzero(q, sizeof(q));
+    strcpy(q, query);
+    write(socketFd, q, sizeof(q));
 
-    close(sockfd);
+    char buf[80];
+    printf("whoClient Communicating with server\n");
+    sleep(2);
+
+    /*int len = read(socketFd, buf, sizeof(buf));         //read answer from server
+    if (len != 0) {
+        buf[len] = '\0';
+        printf("%s\n", buf);
+        bzero(buf, sizeof(buf));
+    }*/
+
+//    char done[10];
+//    memset(done, '\0', sizeof(done));
+//    strcpy(done, "done");
+//    write(sockfd, done, sizeof(done));
+
+    close(socketFd);
     pthread_exit(NULL);
 }

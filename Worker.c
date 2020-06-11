@@ -14,17 +14,20 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-int fail = 0;
-int success = 0;
 int numofDir = 0;
 char **DirList = NULL;
+
+RecordList *Rec = NULL;           //list that stores all the patients
+
+HashTable *RecordsByDisease = NULL;
+HashTable *RecordsByCountry = NULL;
 
 
 void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int socketFd);
 void EnterPatientRecord(RecordList* list, HashTable* disease, HashTable* Country, HashTable* stat, int entries, char* date, patientRecord* patient, char* dirName);
 void SortFiles (char **FileList, int numOfFiles);
 void signal_handler(int sig);
-void make_logfile();
+void answerQuery(char *query, char** answer);
 
 int main(int argc, char** argv) {
 
@@ -47,8 +50,7 @@ int main(int argc, char** argv) {
     int bufferSize = atoi(argv[2]);
     int serverPort = atoi(argv[3]);  //Statistics Server port
     char *serverIp = argv[4];
-
-    printf("Port : %d , Ip : %s\n", serverPort, serverIp);
+    printf("Worker : ServerIp : %s ServerPort : %d\n", serverIp, serverPort);
 
     char *buf = malloc(sizeof(char) * bufferSize);
     char *message = malloc(sizeof(char) * 512);
@@ -81,51 +83,63 @@ int main(int argc, char** argv) {
         }
     }
 
-    //read(readfd, buf, bufferSize);
-    //char *serverPort = malloc(sizeof(char )*bufferSize);
-    //strcpy(serverPort, buf);
-    //printf("ServerPort : %s\n", serverPort);
-    //read(readfd, buf, bufferSize);
-    //char *serverIp = malloc(sizeof(char )*bufferSize);
-    //strcpy(serverIp, buf);
-    //printf("ServerIp : %s\n", serverIp);
+    int serverfd, queryfd;
+    struct sockaddr_in server, worker;
 
-    int sockfd;
-    struct sockaddr_in server, client;
+    /* open a TCP socket */
+    if((serverfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("can't open stream socket");
+        close(writefd);
+        close(readfd);
+
+        for (int i = 0; i < numofDir; ++i) {
+            free(DirList[i]);
+        }
+        free(DirList);
+
+        free(buf);
+        free(message);
+        exit(1);
+    }
 
     //Setup Server
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(serverIp);
     server.sin_port = htons(serverPort);
 
+    if((connect(serverfd, (struct sockaddr *) &server, sizeof(server))) < 0) {
+        perror("can't connect to server");
+        close(writefd);
+        close(readfd);
+
+        for (int i = 0; i < numofDir; ++i) {
+            free(DirList[i]);
+        }
+        free(DirList);
+
+        free(buf);
+        free(message);
+        exit(1);
+    }
+
     /* Create socket */
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    if (((queryfd = socket(AF_INET, SOCK_STREAM, 0))) < 0) {
         perror("socket"); exit(1); }
 
     /* Setup my address */
-    //client.sin_family = AF_INET;        /* Internet domain */
-    //client.sin_addr.s_addr=htonl(INADDR_ANY); /*Any address*/
-    //client.sin_port = htons(0);         /* Autoselect port */
+    worker.sin_family = AF_INET;
+    worker.sin_addr.s_addr = inet_addr("127.0.0.1");
+    worker.sin_port = htons(7000);
 
-    //if (bind(sockfd, (struct sockaddr *) &client, sizeof(client)) < 0) {
-    //    perror("bind"); exit(1); }
+    char queryPort[5];
+    memset(queryPort, '\0', sizeof(queryPort));
+    sprintf(queryPort, "%d", worker.sin_port);
+    write(serverfd, queryPort, sizeof(queryPort));
 
-    /* open a TCP socket */
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("can't open stream socket");
-        exit(1);
-    }
+    Rec = initList();           //list that stores all the patients
 
-    /* connect to the server */
-    if(connect(sockfd, (struct sockaddr *) &server, sizeof(server)) < 0) {
-        perror("can't connect to server");
-        exit(1);
-    }
-
-    RecordList *Records = initList();           //list that stores all the patients
-
-    HashTable *RecordsByDisease = InitHashTable(23);
-    HashTable *RecordsByCountry = InitHashTable(23);
+    RecordsByDisease = InitHashTable(23);
+    RecordsByCountry = InitHashTable(23);
 
     DIR *d;
     struct dirent *dir;
@@ -168,7 +182,7 @@ int main(int argc, char** argv) {
                 return -1;
             }
 
-            updateStucts(fd, Records, RecordsByDisease, RecordsByCountry, FilePerDir[j], DirList[i], sockfd);
+            updateStucts(fd, Rec, RecordsByDisease, RecordsByCountry, FilePerDir[j], DirList[i], serverfd);
 
             fclose(fd);
 
@@ -187,11 +201,53 @@ int main(int argc, char** argv) {
     char done[10];
     memset(done, '\0', sizeof(done));
     strcpy(done, "done");
-    write(sockfd, done, sizeof(done));
+    write(serverfd, done, sizeof(done));        //write to statistics port*/
 
-    close(sockfd);
+    //Bind queryfd to worker address
+    if ((bind(queryfd, (struct sockaddr *) &worker, sizeof(worker))) < 0) {
+        perror("bind"); exit(1); }
 
-    Exit(RecordsByDisease,RecordsByCountry, 23, Records);
+    listen(queryfd, 1);
+
+    printf("Worker : Waiting for server to port %d\n", worker.sin_port);
+    int queryServLen = sizeof(server);
+    int newQueryFd = accept(queryfd, (struct sockaddr *) &server, &queryServLen);
+
+
+    char delim[2];
+    memset(delim, '\0', sizeof(delim));
+    strcpy(delim, "&");
+
+    char *ans = malloc(sizeof(char )*100);
+    memset(ans, '\0', sizeof(char )*100);
+
+    int len;
+    char query[80];
+    printf("Worker Communicating with server\n");
+    do {
+        bzero(query, sizeof(query));
+        len = read(newQueryFd, query, sizeof(query));       //read Query from Server
+        /* make sure it's a proper string */
+        if (len != 0) {
+            query[len] = '\0';
+            printf("Worker got query %s", query);
+
+            answerQuery(query,  &ans);
+
+            //Send Query to worker
+            write(newQueryFd, ans, strlen(ans));        //write to Server the answer
+            break;
+        }
+    } while (1);
+
+    free(ans);
+    close(queryfd);
+    close(newQueryFd);
+    //close(serverfd);
+
+    Exit(RecordsByDisease,RecordsByCountry, 23, Rec);
+    free(RecordsByCountry);
+    free(RecordsByDisease);
     close(writefd);
     close(readfd);
 
@@ -203,7 +259,7 @@ int main(int argc, char** argv) {
     free(buf);
     free(message);
 
-
+    return 0;
 }
 
 
@@ -221,30 +277,8 @@ void signal_handler(int sig){
     if(sig == SIGINT){
         signal(SIGINT, signal_handler);
         printf("Worker got users SIGINT\n");
-        make_logfile();
-    } else if(sig == SIGQUIT){
-        signal(SIGQUIT, signal_handler);
-        printf("Worker got users SIGQUIT\n");
-        make_logfile();
+
     }
-}
-
-void make_logfile() {
-    chdir("..");
-    char name[20];
-    sprintf(name, "log_file%d", getpid());
-    FILE *logFile = fopen(name, "w+");
-
-    for (int i = 0; i < numofDir; i++) {
-        if (DirList[i] != NULL)
-            fprintf(logFile, "%s\n", DirList[i]);
-    }
-
-    int total = success + fail;
-    fprintf(logFile, "TOTAL %d\n", total);
-    fprintf(logFile, "SUCCESS %d\n", success);
-    fprintf(logFile, "FAIL %d\n", fail);
-    fclose(logFile);
 }
 
 void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int socketFd){
@@ -288,7 +322,7 @@ void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, Ha
 
         EnterPatientRecord(Records, RecordsByDisease, RecordsByCountry, Stats, 23, filename, patient, dirname);
     }
-    getStatistics(Stats, 23, filename, dirname, socketFd);    //categorize and push to pipe the file statistics
+    //getStatistics(Stats, 23, filename, dirname, socketFd);    //categorize and push to pipe the file statistics
     DestroyHashTable(Stats, 23);
     free(Stats);
     free(buffer);
@@ -313,5 +347,235 @@ void SortFiles (char **FileList, int numOfFiles) {
                 free(tmpValue);
             }
         }
+    }
+}
+
+
+void answerQuery(char *query, char** answer){
+    char *token;
+    char skip[2] = " ";
+
+    strcat(query, "\n");
+    strtok(query, "\n");
+    token = strtok(query, skip);
+    if (strcmp(token, "/diseaseFrequency") == 0) {
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            strcpy(*answer, "Error");
+            return;
+        }
+        char *virusName = malloc(strlen(token) + 1);
+        strcpy(virusName, token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : Entry Date must be entered\n");
+            free(virusName);
+            return;
+        }
+        char *date1 = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(date1, token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : Entry Date must be entered\n");
+            free(virusName);
+            free(date1);
+            return;
+        }
+        char *date2 = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(date2, token);
+
+        token = strtok(NULL, skip);
+        if (token != NULL) {
+            char *country = malloc(sizeof(char) * strlen(token) + 1);
+            strcpy(country, token);
+            diseaseFrequency(*answer, virusName, date1, date2, country, RecordsByCountry, 23);
+            free(country);
+            free(virusName);
+            free(date1);
+            free(date2);
+            return;
+        } else {
+            diseaseFrequency(*answer, virusName, date1, date2, NULL, RecordsByDisease, 23);
+            free(virusName);
+            free(date1);
+            free(date2);
+            return;
+        }
+    }else if (strcmp(token, "/topkAgeRanges") == 0) {
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : Enter rank number\n");
+            return;
+        }
+        int k = atoi(token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : Enter Country\n");
+            return;
+        }
+        char *country = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(country, token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : Enter Disease\n");
+            return;
+        }
+        char *disease = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(disease, token);
+
+        token = strtok(NULL, skip);
+        if (token != NULL) {
+            char *date1 = malloc(sizeof(char) * strlen(token) + 1);
+            strcpy(date1, token);
+            token = strtok(NULL, skip);
+            if (token == NULL) {
+                char error[7];
+                strcpy(*answer, "Error");
+                free(date1);
+                free(country);
+                return;
+            }
+            char *date2 = malloc(sizeof(char) * strlen(token) + 1);
+            strcpy(date2, token);
+            topkAgeRanges(*answer, RecordsByCountry, 23, k, country, disease, date1, date2);
+            free(date1);
+            free(date2);
+            free(country);
+            free(disease);
+            return;
+        }
+    } else if (strcmp(token, "/searchPatientRecord") == 0) {
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : RecordId must be entered\n");
+            return;
+        }
+        searchPatientRecord(*answer, token, Rec);
+        return;
+    } else if (strcmp(token, "/numPatientDischarges") == 0) {
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : Enter Disease\n");
+            return;
+        }
+        char *disease = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(disease, token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            free(disease);
+            //printf("Input Error : Enter Date\n");
+            return;
+        }
+        char *date1 = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(date1, token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            free(disease);
+            free(date1);
+            //printf("Input Error : Enter Date\n");
+            return;
+        }
+        char *date2 = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(date2, token);
+        token = strtok(NULL, skip);
+
+        if (token == NULL) {
+            numPatientDischarges(*answer, RecordsByCountry, 23, NULL, disease, date1, date2);
+            free(disease);
+            free(date1);
+            free(date2);
+            return;
+        }else {
+            char *country = malloc(sizeof(char) * strlen(token) + 1);
+            strcpy(country, token);
+
+            numPatientDischarges(*answer, RecordsByCountry, 23, country, disease, date1, date2);
+            free(disease);
+            free(country);
+            free(date1);
+            free(date2);
+            return;
+            }
+    } else if (strcmp(token, "/numPatientAdmissions") == 0) {
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            char error[7];
+            strcpy(*answer, "Error");
+            //printf("Input Error : Enter Disease\n");
+            return;
+        }
+        char *disease = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(disease, token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            //printf("Input Error : Enter Date\n");
+            char error[7];
+            strcpy(*answer, "Error");
+            free(disease);
+            return;
+        }
+        char *date1 = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(date1, token);
+
+        token = strtok(NULL, skip);
+        if (token == NULL) {
+            //printf("Input Error : Enter Date\n");
+            char error[7];
+            strcpy(*answer, "Error");
+            free(disease);
+            free(date1);
+            return;
+        }
+        char *date2 = malloc(sizeof(char) * strlen(token) + 1);
+        strcpy(date2, token);
+
+        token = strtok(NULL, skip);
+
+        if (token == NULL) {
+            numPatientAdmissions(*answer, RecordsByCountry, 23, NULL, disease, date1, date2);
+            free(disease);
+            free(date1);
+            free(date2);
+            return;
+        } else {
+            char *country = malloc(sizeof(char) * strlen(token) + 1);
+            strcpy(country, token);
+
+            numPatientAdmissions(*answer, RecordsByCountry, 23, country, disease, date1, date2);
+            free(disease);
+            free(country);
+            free(date1);
+            free(date2);
+            return;
+        }
+    } else {
+        char error[7];
+        strcpy(*answer, "Error");
+        return;
     }
 }

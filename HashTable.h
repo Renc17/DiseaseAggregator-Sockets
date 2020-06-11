@@ -35,12 +35,11 @@ void getStatistics(HashTable* h, int entries, char* filename, char *dirname, int
 void DestroyHashTable(HashTable* h, int entries);
 
 
-void listCountries(int push_fd, char** Countries, int numOfCountries, int child_id);
-void diseaseFrequency(int push_fd, char *disease, char* date1, char* date2, char* country, HashTable* h, int entries);
-void topkAgeRanges(int push_fd, HashTable* h, int entries, int k, char* country, char* disease, char* date1, char* date2);
-void searchPatientRecord(int push_fd, char* id, RecordList* list);
-void numPatientAdmissions(int push_fd, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2);
-void numPatientDischarges(int push_fd, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2);
+void diseaseFrequency(char *answer, char *disease, char* date1, char* date2, char* country, HashTable* h, int entries);
+void topkAgeRanges(char *answer, HashTable* h, int entries, int k, char* country, char* disease, char* date1, char* date2);
+void searchPatientRecord(char *answer, char* id, RecordList* list);
+void numPatientAdmissions(char *answer, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2);
+void numPatientDischarges(char *answer, HashTable* h, int entries, char* country, char* disease, char* date1, char* date2);
 void Exit(HashTable* h1, HashTable* h2, int entries, RecordList* list);
 
 void Sort (topkArray *array) ;
