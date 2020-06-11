@@ -111,7 +111,7 @@ int main(int argc, char** argv){
 
 }
 
-void *Client(void *query){
+void *Client(void *query) {
 
     printf("%ld Query : %s", pthread_self(), (char *) query);
 
@@ -125,14 +125,14 @@ void *Client(void *query){
     printf("Client : Port : %d Ip : %d\n", servPort, server.sin_addr.s_addr);
 
     /* open a TCP socket */
-    if((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("can't open stream socket");
         exit(1);
     }
 
     printf("Client : Waiting to connect to server\n");
     /* connect to the server */
-    if((connect(socketFd, (struct sockaddr *) &server, sizeof(server))) < 0){
+    if ((connect(socketFd, (struct sockaddr *) &server, sizeof(server))) < 0) {
         perror("can't connect to server");
         exit(1);
     }
@@ -145,19 +145,15 @@ void *Client(void *query){
 
     char buf[80];
     printf("whoClient Communicating with server\n");
-    sleep(2);
 
-    /*int len = read(socketFd, buf, sizeof(buf));         //read answer from server
-    if (len != 0) {
-        buf[len] = '\0';
-        printf("%s\n", buf);
-        bzero(buf, sizeof(buf));
-    }*/
-
-//    char done[10];
-//    memset(done, '\0', sizeof(done));
-//    strcpy(done, "done");
-//    write(sockfd, done, sizeof(done));
+    int len;
+    while ((len = read(socketFd, buf, sizeof(buf))) >= 0){
+        if (len != 0) {
+            buf[len] = '\0';
+            printf("Answer : %s\n", buf);
+            bzero(buf, sizeof(buf));
+        }
+    }
 
     close(socketFd);
     pthread_exit(NULL);

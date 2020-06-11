@@ -180,13 +180,16 @@ int main(int argc, char** argv){
 
                     //Send Query to worker
                     write(workerSocket, message, sizeof(message));
+                    bzero(message, sizeof(message));
 
                     int bytesIn = read(workerSocket, message, sizeof(message));       //read answer from worker
+                    write(whoClientSocket, message, sizeof(message));
+
                     message[bytesIn] = '\0';
                     printf("Server got answer : %s\n", message);
 
-                    //write(querySocket, message, sizeof(message));
-                    //bzero(message, sizeof(message));
+                    close(whoClientSocket);
+                    close(workerSocket);
                     return 0;
                 }
             } while (1);
