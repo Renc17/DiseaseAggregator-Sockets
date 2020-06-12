@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
     server.sin_port = htons(serverPort);
 
     if((connect(serverfd, (struct sockaddr *) &server, sizeof(server))) < 0) {
-        perror("can't connect to server");
+        perror("Worker : can't connect to server is busy");
         close(writefd);
         close(readfd);
 
@@ -129,12 +129,13 @@ int main(int argc, char** argv) {
     /* Setup my address */
     worker.sin_family = AF_INET;
     worker.sin_addr.s_addr = inet_addr("127.0.0.1");
-    worker.sin_port = htons(7000);
+    worker.sin_port = htons(0);
 
     char queryPort[5];
     memset(queryPort, '\0', sizeof(queryPort));
     sprintf(queryPort, "%d", worker.sin_port);
     write(serverfd, queryPort, sizeof(queryPort));
+    printf("Worker : Port assigned %d\n", worker.sin_port);
 
     Rec = initList();           //list that stores all the patients
 
@@ -201,11 +202,12 @@ int main(int argc, char** argv) {
     char done[10];
     memset(done, '\0', sizeof(done));
     strcpy(done, "done");
-    write(serverfd, done, sizeof(done));        //write to statistics port*/
+    write(serverfd, done, sizeof(done));        //write to statistics port
 
     //Bind queryfd to worker address
-    if ((bind(queryfd, (struct sockaddr *) &worker, sizeof(worker))) < 0) {
-        perror("bind"); exit(1); }
+    /*if ((bind(queryfd, (struct sockaddr *) &worker, sizeof(worker))) < 0) {
+        perror("bind");
+        exit(1); }
 
     listen(queryfd, 1);
 
@@ -222,12 +224,12 @@ int main(int argc, char** argv) {
     memset(ans, '\0', sizeof(char )*100);
 
     int len;
-    char query[80];
-    printf("Worker Communicating with server\n");
-    do {
+    char query[80];*/
+    printf("Worker %d Communicating with server\n", getpid());
+
+    /*do {
         bzero(query, sizeof(query));
         len = read(newQueryFd, query, sizeof(query));       //read Query from Server
-        /* make sure it's a proper string */
         if (len != 0) {
             query[len] = '\0';
             printf("Worker got query %s", query);
@@ -236,13 +238,12 @@ int main(int argc, char** argv) {
 
             //Send Query to worker
             write(newQueryFd, ans, strlen(ans));        //write to Server the answer
-            break;
         }
-    } while (1);
+    } while (1);*/
 
-    free(ans);
+    //free(ans);
     close(queryfd);
-    close(newQueryFd);
+    //close(newQueryFd);
     //close(serverfd);
 
     Exit(RecordsByDisease,RecordsByCountry, 23, Rec);
@@ -281,7 +282,7 @@ void signal_handler(int sig){
     }
 }
 
-void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int socketFd){
+void updateStucts(FILE* fd, RecordList *Records, HashTable* RecByDisease, HashTable* RecByCountry, char *filename, char* dirname, int socketFd){
 
     size_t lineSize = 200;
     char *token;
@@ -320,9 +321,9 @@ void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, Ha
         patient->age = malloc(sizeof(char) * strlen(token) + 1);
         set_age(patient, token);
 
-        EnterPatientRecord(Records, RecordsByDisease, RecordsByCountry, Stats, 23, filename, patient, dirname);
+        EnterPatientRecord(Records, RecByDisease, RecByCountry, Stats, 23, filename, patient, dirname);
     }
-    //getStatistics(Stats, 23, filename, dirname, socketFd);    //categorize and push to pipe the file statistics
+    getStatistics(Stats, 23, filename, dirname, socketFd);    //categorize and push to pipe the file statistics
     DestroyHashTable(Stats, 23);
     free(Stats);
     free(buffer);
