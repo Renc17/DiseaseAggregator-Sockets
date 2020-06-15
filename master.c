@@ -139,14 +139,21 @@ int main(int argc, char** argv) {
             strcpy(DirList[numofDir - 1], dir->d_name);
         }
     }
+    closedir(d);
 
     printf("\n\n");
+
+    char numW[bufferSize];
+    memset(numW, '\0', sizeof(numW));
+    sprintf(numW, "%d", numWorkers);
+
     if (flag == 1) {      //send to every worker the sign that directories have been distributed
         char end[bufferSize];
         memset(end, '\0', sizeof(char )* bufferSize);
         strcpy(end, "end");
         for (int j = 0; j < numWorkers; j++) {
             write(write_fd[j], end, bufferSize);
+            write(write_fd[j], numW, bufferSize);
             //printf("Parent : Sending end pipe %d\n", write_fd[j]);
         }
     } else {   //if there are more workers then directories
@@ -156,6 +163,7 @@ int main(int argc, char** argv) {
             strcpy(end, "end");
             for (int j = 0; j < i; j++) {          //send the ending message to those who got work to do
                 write(write_fd[j], end, bufferSize);
+                write(write_fd[j], numW, bufferSize);
                 //printf("Parent : Sending signal ending pipe %d\n", write_fd[j]);
             }
             char nodir[bufferSize];
@@ -170,8 +178,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    closedir(d);
-
 
     while ((wait_child_id = wait(&status)) > 0);
 
@@ -180,6 +186,12 @@ int main(int argc, char** argv) {
             free(directory[i]);
     }
     free(directory);
+
+    for (i = 0; i < numofDir; i++) {   //free everything left
+        if (DirList[i] != NULL)
+            free(DirList[i]);
+    }
+    free(DirList);
 
     for (i = 0; i < numWorkers; ++i) {
         sprintf(FIFO1, "read%d", pid[i]);

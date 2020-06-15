@@ -9,7 +9,6 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <signal.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -23,7 +22,7 @@ HashTable *RecordsByDisease = NULL;
 HashTable *RecordsByCountry = NULL;
 
 
-void updateStucts(FILE* fd, RecordList *Records, HashTable* RecordsByDisease, HashTable* RecordsByCountry, char *filename, char* dirname, int socketFd);
+void updateStructs(FILE* fd, RecordList *Records, HashTable* RecByDisease, HashTable* RecByCountry, char *filename, char* dirname, int socketFd);
 void EnterPatientRecord(RecordList* list, HashTable* disease, HashTable* Country, HashTable* stat, int entries, char* date, patientRecord* patient, char* dirName);
 void SortFiles (char **FileList, int numOfFiles);
 void signal_handler(int sig);
@@ -32,6 +31,7 @@ void answerQuery(char *query, char** answer);
 int main(int argc, char** argv) {
 
     int readfd, writefd;
+    int nodir = 0;
 
     char FIFO1[20];
     sprintf(FIFO1, "read%d", getpid());
@@ -56,23 +56,23 @@ int main(int argc, char** argv) {
     char *message = malloc(sizeof(char) * 512);
     memset(message, '\0', sizeof(char) * 512);
     int bytesIn;
+    char numWorkers[5];
     DirList = malloc(sizeof(char *) * numofDir);
 
     while (1) {        //read until & sign, compose and store the names of the directories
         bytesIn = read(readfd, buf, bufferSize);
         if(bytesIn > 0) {
             if (strcmp(buf, "end") == 0) {
+                bytesIn = read(readfd, buf, bufferSize);
+                if(bytesIn > 0){
+                    strcpy(numWorkers, buf);
+                }
                 break;
             }
             else if (strcmp(buf, "noDir") == 0) {
-                printf("No work for me!!! child pid %d\n", getpid());       //worker with no job free allocated memory than teminate
-                close(readfd);
-                close(writefd);
-                unlink(FIFO1);
-                unlink(FIFO2);
-                free(buf);
-                free(DirList);
-                return 0;
+                printf("No work for me!!! child pid %d\n", getpid());       //worker with no job free allocated memory than terminate
+                nodir = 1;
+                break;
             } else {
                 numofDir++;
                 DirList = realloc(DirList, sizeof(char *) * numofDir);
@@ -107,6 +107,7 @@ int main(int argc, char** argv) {
     server.sin_addr.s_addr = inet_addr(serverIp);
     server.sin_port = htons(serverPort);
 
+    printf("Worker %d : Waiting to connect to server\n", getpid());
     if((connect(serverfd, (struct sockaddr *) &server, sizeof(server))) < 0) {
         perror("Worker : can't connect to server is busy");
         close(writefd);
@@ -122,6 +123,20 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+    if(nodir == 1){
+        char terminate[4];
+        memset(terminate, '\0', sizeof(terminate));
+        strcpy(terminate, "end");
+        write(serverfd, terminate, sizeof(terminate));
+
+        close(readfd);
+        close(writefd);
+        unlink(FIFO1);
+        unlink(FIFO2);
+        free(buf);
+        free(DirList);
+        return 0;
+    }
     /* Create socket */
     if (((queryfd = socket(AF_INET, SOCK_STREAM, 0))) < 0) {
         perror("socket"); exit(1); }
@@ -183,7 +198,7 @@ int main(int argc, char** argv) {
                 return -1;
             }
 
-            updateStucts(fd, Rec, RecordsByDisease, RecordsByCountry, FilePerDir[j], DirList[i], serverfd);
+            updateStructs(fd, Rec, RecordsByDisease, RecordsByCountry, FilePerDir[j], DirList[i], serverfd);
 
             fclose(fd);
 
@@ -203,9 +218,10 @@ int main(int argc, char** argv) {
     memset(done, '\0', sizeof(done));
     strcpy(done, "done");
     write(serverfd, done, sizeof(done));        //write to statistics port
+    printf("Worker : Exiting after sending done to server\n");
 
     //Bind queryfd to worker address
-    /*if ((bind(queryfd, (struct sockaddr *) &worker, sizeof(worker))) < 0) {
+    if ((bind(queryfd, (struct sockaddr *) &worker, sizeof(worker))) < 0) {
         perror("bind");
         exit(1); }
 
@@ -224,27 +240,45 @@ int main(int argc, char** argv) {
     memset(ans, '\0', sizeof(char )*100);
 
     int len;
-    char query[80];*/
+    char query[80];
     printf("Worker %d Communicating with server\n", getpid());
 
-    /*do {
-        bzero(query, sizeof(query));
-        len = read(newQueryFd, query, sizeof(query));       //read Query from Server
-        if (len != 0) {
-            query[len] = '\0';
-            printf("Worker got query %s", query);
+    fd_set master, branch;
+    FD_ZERO(&master);
+    FD_SET(queryfd, &master);
+    FD_SET(newQueryFd, &master);
 
-            answerQuery(query,  &ans);
+    do {
+        branch = master;
+        if((select(FD_SETSIZE, &branch, NULL, NULL, NULL)) < 0){ exit(1); }
+        for (int i = 0; i < FD_SETSIZE; ++i) {
+            if(FD_ISSET(i, &branch)){
+                if(i == queryfd){
+                    printf("Worker is not expecting new connections\n");
+                } else{
+                    len = read(i, query, sizeof(query));       //read Query from Server
+                    if (len > 0) {
+                        query[len] = '\0';
+                        printf("Worker got query %s", query);
 
-            //Send Query to worker
-            write(newQueryFd, ans, strlen(ans));        //write to Server the answer
+                        answerQuery(query,  &ans);
+
+                        //Send Query to worker
+                        write(i, ans, strlen(ans));        //write to Server the answer
+                        bzero(query, sizeof(query));
+                    } else{
+                        close(i);
+                        FD_CLR(i, &master);
+                    }
+                }
+            }
         }
-    } while (1);*/
+    } while (1);
 
     //free(ans);
     close(queryfd);
     //close(newQueryFd);
-    //close(serverfd);
+    close(serverfd);
 
     Exit(RecordsByDisease,RecordsByCountry, 23, Rec);
     free(RecordsByCountry);
@@ -278,11 +312,10 @@ void signal_handler(int sig){
     if(sig == SIGINT){
         signal(SIGINT, signal_handler);
         printf("Worker got users SIGINT\n");
-
     }
 }
 
-void updateStucts(FILE* fd, RecordList *Records, HashTable* RecByDisease, HashTable* RecByCountry, char *filename, char* dirname, int socketFd){
+void updateStructs(FILE* fd, RecordList *Records, HashTable* RecByDisease, HashTable* RecByCountry, char *filename, char* dirname, int socketFd){
 
     size_t lineSize = 200;
     char *token;
