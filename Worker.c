@@ -86,7 +86,8 @@ int main(int argc, char** argv) {
     int serverfd, queryfd;
     struct sockaddr_in server, worker;
 
-    /* open a TCP socket */
+    //################# SET UP SOCKET TO DELIVER STATISTICS TO SERVER #################//
+
     if((serverfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("can't open stream socket");
         close(writefd);
@@ -102,7 +103,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    //Setup Server
+    bzero(&server, sizeof(server));
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(serverIp);
     server.sin_port = htons(serverPort);
@@ -137,7 +138,8 @@ int main(int argc, char** argv) {
         free(DirList);
         return 0;
     }
-    /* Create socket */
+
+    //############# SET UP SOCKET (~SERVER) FOR QUERIES #################//
     if (((queryfd = socket(AF_INET, SOCK_STREAM, 0))) < 0) {
         perror("socket"); exit(1); }
 
@@ -146,11 +148,21 @@ int main(int argc, char** argv) {
     worker.sin_addr.s_addr = inet_addr("127.0.0.1");
     worker.sin_port = htons(0);
 
-    char queryPort[5];
+    //Bind queryfd to worker address
+    if ((bind(queryfd, (struct sockaddr *) &worker, sizeof(worker))) < 0) {
+        perror("bind");
+        exit(1); }
+
+    struct sockaddr_in myaddr;
+    int socklen = sizeof(worker);
+    getsockname(queryfd, (struct sockaddr *) &myaddr, &socklen);
+
+    printf("Worker : Listening on address %s Port assigned %d\n", inet_ntoa(myaddr.sin_addr) , myaddr.sin_port);
+
+    char queryPort[10];
     memset(queryPort, '\0', sizeof(queryPort));
-    sprintf(queryPort, "%d", worker.sin_port);
+    sprintf(queryPort, "%d", myaddr.sin_port);
     write(serverfd, queryPort, sizeof(queryPort));
-    printf("Worker : Port assigned %d\n", worker.sin_port);
 
     Rec = initList();           //list that stores all the patients
 
@@ -220,21 +232,11 @@ int main(int argc, char** argv) {
     write(serverfd, done, sizeof(done));        //write to statistics port
     printf("Worker : Exiting after sending done to server\n");
 
-    //Bind queryfd to worker address
-    if ((bind(queryfd, (struct sockaddr *) &worker, sizeof(worker))) < 0) {
-        perror("bind");
-        exit(1); }
+    listen(queryfd, 3);
 
-    listen(queryfd, 1);
-
-    printf("Worker : Waiting for server to port %d\n", worker.sin_port);
     int queryServLen = sizeof(server);
+    printf("Worker : Waiting for server to port %s\n", queryPort);
     int newQueryFd = accept(queryfd, (struct sockaddr *) &server, &queryServLen);
-
-
-    char delim[2];
-    memset(delim, '\0', sizeof(delim));
-    strcpy(delim, "&");
 
     char *ans = malloc(sizeof(char )*100);
     memset(ans, '\0', sizeof(char )*100);
@@ -245,7 +247,6 @@ int main(int argc, char** argv) {
 
     fd_set master, branch;
     FD_ZERO(&master);
-    FD_SET(queryfd, &master);
     FD_SET(newQueryFd, &master);
 
     do {
@@ -253,23 +254,16 @@ int main(int argc, char** argv) {
         if((select(FD_SETSIZE, &branch, NULL, NULL, NULL)) < 0){ exit(1); }
         for (int i = 0; i < FD_SETSIZE; ++i) {
             if(FD_ISSET(i, &branch)){
-                if(i == queryfd){
-                    printf("Worker is not expecting new connections\n");
-                } else{
-                    len = read(i, query, sizeof(query));       //read Query from Server
-                    if (len > 0) {
-                        query[len] = '\0';
-                        printf("Worker got query %s", query);
+                len = read(i, query, sizeof(query));       //read Query from Server
+                if (len > 0) {
+                    query[len] = '\0';
+                    printf("Worker got query %s", query);
 
-                        answerQuery(query,  &ans);
+                    answerQuery(query,  &ans);
 
-                        //Send Query to worker
-                        write(i, ans, strlen(ans));        //write to Server the answer
-                        bzero(query, sizeof(query));
-                    } else{
-                        close(i);
-                        FD_CLR(i, &master);
-                    }
+                    //Send Query to worker
+                    write(i, ans, strlen(ans));        //write to Server the answer
+                    bzero(query, sizeof(query));
                 }
             }
         }
