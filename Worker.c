@@ -21,6 +21,7 @@ RecordList *Rec = NULL;           //list that stores all the patients
 HashTable *RecordsByDisease = NULL;
 HashTable *RecordsByCountry = NULL;
 
+int shutDown = 0;
 
 void updateStructs(FILE* fd, RecordList *Records, HashTable* RecByDisease, HashTable* RecByCountry, char *filename, char* dirname, int socketFd);
 void EnterPatientRecord(RecordList* list, HashTable* disease, HashTable* Country, HashTable* stat, int entries, char* date, patientRecord* patient, char* dirName);
@@ -29,6 +30,8 @@ void signal_handler(int sig);
 void answerQuery(char *query, char** answer);
 
 int main(int argc, char** argv) {
+
+    signal(SIGINT, signal_handler);
 
     int readfd, writefd;
     int nodir = 0;
@@ -157,7 +160,7 @@ int main(int argc, char** argv) {
     int socklen = sizeof(worker);
     getsockname(queryfd, (struct sockaddr *) &myaddr, &socklen);
 
-    printf("Worker : Listening on address %s Port assigned %d\n", inet_ntoa(myaddr.sin_addr) , myaddr.sin_port);
+    //printf("Worker : Listening on address %s Port assigned %d\n", inet_ntoa(myaddr.sin_addr) , myaddr.sin_port);
 
     char queryPort[10];
     memset(queryPort, '\0', sizeof(queryPort));
@@ -230,7 +233,7 @@ int main(int argc, char** argv) {
     memset(done, '\0', sizeof(done));
     strcpy(done, "done");
     write(serverfd, done, sizeof(done));        //write to statistics port
-    printf("Worker : Exiting after sending done to server\n");
+    //printf("Worker : Exiting after sending done to server\n");
 
     listen(queryfd, 3);
 
@@ -261,17 +264,19 @@ int main(int argc, char** argv) {
 
                     answerQuery(query,  &ans);
 
-                    //Send Query to worker
+                    //printf("Worker %d writing answer back to server : %s\n", getpid(), ans);
                     write(i, ans, strlen(ans));        //write to Server the answer
                     bzero(query, sizeof(query));
                 }
             }
         }
+        if(shutDown == 1)
+            break;
     } while (1);
 
-    //free(ans);
+    free(ans);
     close(queryfd);
-    //close(newQueryFd);
+    close(newQueryFd);
     close(serverfd);
 
     Exit(RecordsByDisease,RecordsByCountry, 23, Rec);
@@ -306,6 +311,7 @@ void signal_handler(int sig){
     if(sig == SIGINT){
         signal(SIGINT, signal_handler);
         printf("Worker got users SIGINT\n");
+        shutDown = 1;
     }
 }
 

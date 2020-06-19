@@ -118,7 +118,6 @@ void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int
             Bucket *currentBucket = h[i].buckets;
             while(currentBucket != NULL) {
                 strcat(statMessage, currentBucket->value->name);
-                //printf("%s\n", currentBucket->value->name);
                 strcat(statMessage, "\n");
                 write(push_fd, statMessage, sizeof(statMessage));
                 memset(statMessage, '\0', sizeof(statMessage));
@@ -129,28 +128,24 @@ void getStatistics(HashTable* h, int entries, char* filename, char* dirname, int
                 strcat(statMessage, "Age range 0-20 years: ");
                 sprintf(num, "%d cases\n", categories[0]);
                 strcat(statMessage, num);
-                 //printf("Age range 0-20 years: %d\n", categories[0]);
                 write(push_fd, statMessage, sizeof(statMessage));
                 memset(statMessage, '\0', sizeof(statMessage));
 
                 strcat(statMessage, "Age range 21-40 years: ");
                 sprintf(num, "%d cases\n", categories[1]);
                 strcat(statMessage, num);
-                //printf("Age range 21-40 years: %d\n", categories[1]);
                 write(push_fd, statMessage, sizeof(statMessage));
                 memset(statMessage, '\0', sizeof(statMessage));
 
                 strcat(statMessage, "Age range 41-60 years: ");
                 sprintf(num, "%d cases\n", categories[2]);
                 strcat(statMessage, num);
-                //printf("Age range 41-60 years: %d\n", categories[2]);
                 write(push_fd, statMessage, sizeof(statMessage));
                 memset(statMessage, '\0', sizeof(statMessage));
 
                 strcat(statMessage, "Age range 60+ years: ");
                 sprintf(num, "%d cases\n", categories[3]);
                 strcat(statMessage, num);
-                //printf("Age range 60+ years: %d\n", categories[2]);
                 write(push_fd, statMessage, sizeof(statMessage));
                 memset(statMessage, '\0', sizeof(statMessage));
 
@@ -318,7 +313,6 @@ void numPatientDischarges(char *answer, HashTable* h, int entries, char* country
     } else{
         int key = hashFunc(country, entries);
         if(h[key].buckets == NULL){
-
             strcpy(answer, "Error");
             //printf("ERROR : No such country found\n");
             return;
@@ -338,7 +332,6 @@ void numPatientDischarges(char *answer, HashTable* h, int entries, char* country
                 }
                 currentBucket = currentBucket->nextBacket;
             }
-
             strcpy(answer, "Error");
             //printf("ERROR : No such disease in records\n");
         }

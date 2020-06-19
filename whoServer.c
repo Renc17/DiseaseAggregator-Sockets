@@ -9,11 +9,11 @@
 #define MAX_SIZE 80
 #define CLIENT 1
 #define WORKER 0
-#define NUMWORKERS 3
+#define WORKER_SERVER 2
+#define NUMWORKERS 5
 
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;         /* Mutex for synchronization */
 pthread_mutex_t printMtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t avl = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
 int available = 0;
 
@@ -111,12 +111,13 @@ int main(int argc, char** argv){
     //################ GETTING STATISTICS FROM WORKERS #################//
 
     int pos = 0;
+
     for (int j = 0; j < NUMWORKERS; ++j) {
         int clilen = sizeof(worker);
         if (fds[pos].fd == -1) {
             printf("Server : Waiting for worker to connect(Statistics)\n");
             fds[pos].fd = accept(statsSocket, (struct sockaddr *) &worker, &clilen);
-            printf("Server : fd[%d] = %d\n", pos, fds[pos].fd);
+            //printf("Server : fd[%d] = %d\n", pos, fds[pos].fd);
             fds[pos].type = WORKER;
             if (fds[pos].fd < 0) {
                 perror("can't bind local address");
@@ -126,12 +127,13 @@ int main(int argc, char** argv){
             if ((err = pthread_mutex_lock(&mtx))) {
                 exit(1);
             }
+            //printf("Main Thread locked mtx\n");
             if (pos == bufferSize) {
                 pos = 0;
             }
             pos++;
             available++;
-            printf("Server : Accepted a worker - Available socket %d\n", available);
+            //printf("Server : Accepted a worker - Available socket %d\n", available);
             pthread_cond_signal(&avail);
             if ((err = pthread_mutex_unlock(&mtx))) {
                 exit(1);
@@ -139,7 +141,7 @@ int main(int argc, char** argv){
         }
     }
 
-    sleep(6);
+    sleep(3);
 
     //################ SET UP SERVER AND CONNECT TO WORKERS FOR QUERY SERVICE ##################//
 
@@ -157,13 +159,12 @@ int main(int argc, char** argv){
             exit(1);
         }
 
-        printf("Server Connecting to Worker Port : %d, workerCount : %d\n", workerServs[k].sin_port, k);
+        //printf("Server Connecting to Worker Port : %d, workerCount : %d\n", workerServs[k].sin_port, k);
         // connect to the worker
         if ((connect(workerSocket[k], (struct sockaddr *) &workerServs[k], sizeof(workerServs[k]))) < 0) {
             perror("can't connect to worker (Query)");
             exit(1);
         }
-        FD_SET(workerSocket[k], &masterWorker);
     }
 
     //################ SET UP SERVER AND WAIT WHOCLIENT FOR QUERY ##################//
@@ -185,33 +186,30 @@ int main(int argc, char** argv){
     }
 
     // listen to the socket
-    listen(querySocket, numThreads);
+    listen(querySocket, 10);
+    int clilen = sizeof(whoClient);
+    FD_ZERO(&masterWorker);
 
     while (1) {
-        if (pos == bufferSize) {
-            pos = 0;
-        }
-
         printf("\nServer : Waiting for whoClient on port %d\n", queryPortNum);
-
-        int clilen = sizeof(whoClient);
         fds[pos].fd = accept(querySocket, (struct sockaddr *) &whoClient, &clilen);
         fds[pos].type = CLIENT;
         if (fds[pos].fd < 0) {
             perror("can't bind local address (whoClient)");
             continue;
         }
-        printf("Server : Client accepted : %d, type : %d position : %d\n", fds[pos].fd, fds[pos].type, pos);
+        //printf("Server : Client accepted : %d, type : %d position : %d\n", fds[pos].fd, fds[pos].type, pos);
 
         if ((err = pthread_mutex_lock(&mtx))) {
             exit(1);
         }
+        available++;
+        //printf("Server : Accepted a client %d - Available socket %d\n", fds[pos].fd, available);
         if (pos == bufferSize) {
             pos = 0;
         }
         pos++;
-        available++;
-        printf("Server : Accepted a worker - Available socket %d\n", available);
+        //printf("Server : Signaling to wake up handler\n");
         pthread_cond_signal(&avail);
         if ((err = pthread_mutex_unlock(&mtx))) {
             exit(1);
@@ -227,9 +225,6 @@ int main(int argc, char** argv){
     if ((err = pthread_mutex_destroy(&mtx))) {
         exit(1); }
 
-    if ((err = pthread_mutex_destroy(&avl))) {
-        exit(1); }
-
     if ((err = pthread_mutex_destroy(&printMtx))) {
         exit(1); }
 
@@ -241,28 +236,28 @@ void *thread_work(void* args){
 
     while (1) {
         int err;
-
         if ((err = pthread_mutex_lock(&mtx))) {
             exit(1);
+        }
+        //printf("\n\nThread : %ld locked mtx\n", pthread_self());
+        if(available == 0) {
+            //printf("Thread %ld : Waiting for available worker. Available %d\n", pthread_self(), available);
+            pthread_cond_wait(&avail, &mtx);
         }
         if( positionFd == bufferSize){
             positionFd = 0;
         }
-        if(available == 0) {
-            printf("Thread %ld : Waiting for available worker. Available %d\n", pthread_self(), available);
-            pthread_cond_wait(&avail, &mtx);
-        }
         pos = positionFd;
-        //printf("Thread %ld: Locked the mutex -> position %d\n", pthread_self(), pos);
-        //printf("Thread %ld: Read fds %d\n", pthread_self(), sockets[pos].fd);
         positionFd++;
         available--;
-        printf("Thread %ld: I got a worker %d, Available %d\n", pthread_self(), sockets[pos].fd, available);
+        //printf("Thread %ld: I got a worker/whoClient %d, Available %d\n", pthread_self(), sockets[pos].fd, available);
 
+        //printf("\n\nThread : %ld unlocked mtx\n", pthread_self());
         if ((err = pthread_mutex_unlock(&mtx))) {
             exit(1);
         }
 
+        //printf("Thread %ld: Calling Connection_handler for worker/whoClient %d\n", pthread_self(), sockets[pos].fd);
         Connection_handler(sockets, pos);
     }
     pthread_exit(NULL);
@@ -276,16 +271,16 @@ void Connection_handler(socketFds* fds, int pos){
     if (fds[pos].type == WORKER) {
         //printf("Thread %ld: Handling connection\n", pthread_self());
 
-        fd_set master, branch;
-        FD_ZERO(&master);
-        FD_SET(fds[pos].fd, &master);
+        fd_set masterStats, branchStats;
+        FD_ZERO(&masterStats);
+        FD_SET(fds[pos].fd, &masterStats);
 
         int i = 0;
         do {
-            branch = master;
-            if((select(FD_SETSIZE, &branch, NULL, NULL, NULL)) < 0){ return; }
+            branchStats = masterStats;
+            if((select(FD_SETSIZE, &branchStats, NULL, NULL, NULL)) < 0){ return; }
             for (int j = 0; j < FD_SETSIZE; ++j) {
-                if(FD_ISSET(j, &branch)){
+                if(FD_ISSET(j, &branchStats)){
                     bzero(message, sizeof(message));
                     len = read(j, message, MAX_SIZE);
                     if (len > 0) {
@@ -317,67 +312,67 @@ void Connection_handler(socketFds* fds, int pos){
                         }
                     }else{
                         close(j);
-                        FD_CLR(j, &master);
+                        FD_CLR(j, &masterStats);
                     }
                 }
             }
         } while (strcmp(message, "done") != 0);
 
-        printf("Thread %ld is clearing fds (Statistics)\n", pthread_self());
-        //close(fds[pos].fd);
+        //printf("Thread %ld is clearing fds (Statistics)\n", pthread_self());
         fds[pos].fd = -1;
         fds[pos].type = -1;
     }else if( fds[pos].type == CLIENT ) {
 
         //############# SERVER CONNECT TO WORKER FOR QUERIES #################//
 
-        FD_ZERO(&masterWorker);
         FD_SET(fds[pos].fd, &masterWorker);
-        printf("Server : Thread %ld Communicating with whoClient fd %d position %d\n", pthread_self(), fds[pos].fd,pos);
+        printf("Connection_handler : Thread %ld Communicating with whoClient fd %d position %d\n", pthread_self(), fds[pos].fd,pos);
         do {
             branchWorker = masterWorker;
             if((select(FD_SETSIZE, &branchWorker, NULL, NULL, NULL)) < 0){ return; }
             for (int j = 0; j < FD_SETSIZE; ++j) {
                 if (FD_ISSET(j, &branchWorker)) {
-                    if (j == workerSocket[0]) {
-                        printf("Thread %ld : Has nothing to write yet\n", pthread_self());
-                    } else {
-                        bzero(message, sizeof(message));
-                        len = read(j, message, MAX_SIZE);       //read Query from whoClient
-                        if (len > 0) {
-                            message[len] = '\0';
-                            printf("Query : %s\n", message);
+                    bzero(message, sizeof(message));
+                    len = read(j, message, MAX_SIZE);       //read Query from whoClient
+                    if (len > 0) {
+                        message[len] = '\0';
+                        //printf("Query : %s\n", message);
 
-                            //Send Query to worker
-                            for (int i = 0; i < FD_SETSIZE; ++i) {
-                                if (i == workerSocket[0]) {
-                                    write(workerSocket[0], message, sizeof(message));
-                                    bzero(message, sizeof(message));
-
-                                    int bytesIn = read(workerSocket[0], message,
-                                                       sizeof(message));       //read answer from worker
-                                    printf("Server : Thread %ld writing back to his client fd %d pos %d\n", pthread_self(), j, pos);
-                                    write(j, message, sizeof(message));                               //write answer to client
-
-                                    message[bytesIn] = '\0';
-                                    printf("Server got answer : %s\n", message);
-
-                                    bzero(message, sizeof(message));
-                                    bytesIn = read(j, message, sizeof(message));                     //read terminating message from client
-                                    message[bytesIn] = '\0';
-                                    printf("Server got answer : %s\n", message);
-                                }
-                            }
-                        } else {
-                            close(j);
-                            FD_CLR(j, &masterWorker);
+                        //Send Query to worker
+                        for (int i = 0; i < NUMWORKERS; ++i) {
+                        write(workerSocket[i], message, sizeof(message));
                         }
+
+                        for (int i = 0; i < NUMWORKERS; ++i) {
+                            bzero(message, sizeof(message));
+                            int bytesIn = read(workerSocket[i], message, sizeof(message));       //read answer from worker
+                            if(bytesIn > 0) {
+                                //printf("Server : Thread %ld writing back to his client fd %d pos %d\n", pthread_self(), j, pos);
+                                write(j, message, sizeof(message));                               //write answer to client
+                                message[bytesIn] = '\0';
+                                //printf("Server got answer : %s\n", message);
+                                //bzero(message, sizeof(message));
+                                //bytesIn = read(j, message, sizeof(message));                     //read terminating message from client
+                                //message[bytesIn] = '\0';
+                            }
+                        }
+                        bzero(message, sizeof(message));
+                        strcpy(message, "done");
+                        //printf("Server writes done to client\n");
+                        write(j, message, sizeof(message));                               //write answer to client
+                        //printf("Connection_handler write answer and is done\n");
+
+                        //printf("\nThread %ld is clearing fds (Query)\n", pthread_self());
+                        fds[pos].fd = -1;
+                        fds[pos].type = -1;
+
+                        return;
+                    } else {
+                        close(j);
+                        FD_CLR(j, &masterWorker);
                     }
                 }
             }
-        } while (strcmp(message, "done") == 0);
-        printf("Thread %ld is clearing fds (Query)\n", pthread_self());
-        fds[pos].fd = -1;
-        fds[pos].type = -1;
+        } while (1);
     }
 }

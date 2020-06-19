@@ -9,10 +9,12 @@
 #include <fcntl.h>
 #include <dirent.h>
 
-int fail = 0;
-int success = 0;
 int numofDir = 0;
 char **DirList = NULL;
+int status = 0;
+pid_t wait_child_id;
+
+void signal_handler(int sig);
 
 //./master –w numWorkers -b bufferSize –s serverIP  –p serverPort -i input_dir
 int main(int argc, char** argv) {
@@ -23,6 +25,8 @@ int main(int argc, char** argv) {
     int bufferSize = 0;
     char *serverIp = NULL;
     char *serverPort = NULL;
+
+    signal(SIGINT, signal_handler);
 
     int i = 0;
     while (argv[i] != NULL && strcmp(argv[i], "-i") != 0) {
@@ -59,9 +63,8 @@ int main(int argc, char** argv) {
 
 
     pid_t pid[numWorkers];
-    pid_t wait_child_id;
     int read_fd[numWorkers], write_fd[numWorkers];
-    int status = 0;
+
 
     char FIFO1[20];
     char FIFO2[20];
@@ -178,7 +181,6 @@ int main(int argc, char** argv) {
         }
     }
 
-
     while ((wait_child_id = wait(&status)) > 0);
 
     for (i = 0; i < numWorkers; i++) {   //free everything left
@@ -204,4 +206,12 @@ int main(int argc, char** argv) {
             close(write_fd[i]);
     }
 
+}
+
+void signal_handler(int sig){
+    if(sig == SIGINT){
+        signal(SIGINT, signal_handler);
+        printf("Master got users SIGINT\n");
+
+    }
 }
