@@ -231,70 +231,6 @@ int main(int argc, char** argv){
         }
     }
 
-    /*sleep(3);
-
-    //################ SET UP SERVER AND CONNECT TO WORKERS FOR QUERY SERVICE ##################//
-
-    for (i = 0; i < bufferSize; ++i) {
-        fds[i].fd = -1;
-        fds[i].type = -1;
-    }
-
-    struct sockaddr_in workerServs[NUMWORKERS];
-    bzero(workerServs, sizeof(workerServs));
-    //Setup Server
-    for (int k = 0; k < NUMWORKERS; ++k) {
-        workerServs[k].sin_family = AF_INET;
-        workerServs[k].sin_addr.s_addr = inet_addr("127.0.0.1");
-        if ((err = pthread_mutex_lock(&workerCountMutex))) {
-            exit(1);
-        }
-        workerServs[k].sin_port = workerQueryPort[k];
-        if ((err = pthread_mutex_unlock(&workerCountMutex))) {
-            exit(1);
-        }
-        //printf("Server : Port to worker : %d Address %d\n", workerQueryPort[k], workerServs[k].sin_addr.s_addr);
-
-        if ((workerSocket[k] = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-            perror("can't open stream socket");
-            exit(1);
-        }
-
-        //printf("Server Connecting to Worker Port : %d, workerCount : %d\n", workerServs[k].sin_port, k);
-        // connect to the worker
-        if ((connect(workerSocket[k], (struct sockaddr *) &workerServs[k], sizeof(workerServs[k]))) < 0) {
-            perror("can't connect to worker (Query)");
-            exit(1);
-        }
-    }
-
-
-
-    while (1) {
-        //printf("\nServer : Waiting for whoClient on port %d\n", queryPortNum);
-        fds[pos].fd = accept(querySocket, (struct sockaddr *) &whoClient, &clilen);
-        fds[pos].type = CLIENT;
-        if (fds[pos].fd < 0) {
-            perror("can't bind local address (whoClient)");
-            continue;
-        }
-        //printf("Server : Client accepted : %d, type : %d position : %d\n", fds[pos].fd, fds[pos].type, pos);
-
-        if ((err = pthread_mutex_lock(&mtx))) {
-            exit(1);
-        }
-        available++;
-        pos++;
-        printf("Server : Accepted a client %d - Available socket %d\n", fds[pos].fd, available);
-        if (pos == bufferSize-1) {
-            pos = 0;
-        }
-        //printf("Server : Signaling to wake up handler\n");
-        pthread_cond_signal(&avail);
-        if ((err = pthread_mutex_unlock(&mtx))) {
-            exit(1);
-        }
-    }*/
 
     for (i=0 ; i< numThreads ; i++)
         if ((err = pthread_join(*(thread_pool+i), NULL))) {
@@ -411,8 +347,8 @@ void Connection_handler(socketFds* fd, int pos){
         printf("Thread %ld is clearing fds pos %d(Statistics)\n", pthread_self(), pos);
         pthread_mutex_unlock(&printMutex);
 
-        //fds[pos].fd = -1;
-        //fds[pos].type = -1;
+        fds[pos].fd = -1;
+        fds[pos].type = -1;
     } else if( fds[pos].type == CLIENT ) {
 
         //############# SERVER CONNECT TO WORKER FOR QUERIES #################//
@@ -459,8 +395,8 @@ void Connection_handler(socketFds* fd, int pos){
                         //printf("Connection_handler write answer and is done\n");
 
                         //printf("\nThread %ld is clearing fds (Query)\n", pthread_self());
-                        //fds[pos].fd = -1;
-                        //fds[pos].type = -1;
+                        fds[pos].fd = -1;
+                        fds[pos].type = -1;
 
                         return;
                     } else {
