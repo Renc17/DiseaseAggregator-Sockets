@@ -5,9 +5,13 @@
 
 #include <pthread.h>
 #include <netinet/in.h>
-#include <netdb.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+
+pthread_mutex_t printMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t connectMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t getService = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condition = PTHREAD_COND_INITIALIZER;
 
 //./whoClient –q queryFile -w numThreads –sp servPort –sip servIP
 
@@ -17,10 +21,6 @@ int numThreads = 0;
 int servPort = 0;
 char *servIP;
 int available = 0;
-
-pthread_mutex_t printMtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t connectMtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t condition = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char** argv){
 
@@ -85,7 +85,6 @@ int main(int argc, char** argv){
     while (i < numQuery) {
         for (int j = 0; j < numThreads; ++j) {
             if (i < numQuery) {
-                //printf("Creating %d thread, i : %d\n", j, i);
                 if ((err = pthread_create(&thr[j], NULL, Client, (void *) queries[i]))) {
                     printf("Invalid : pthread_create %d\n", err);
                     exit(1);
@@ -94,20 +93,13 @@ int main(int argc, char** argv){
             }
         }
 
-        if ((err = pthread_mutex_lock(&connectMtx))) {
-            exit(1);
-        }
+        pthread_mutex_lock(&connectMutex);
         available++;
-
-        //printf("whoClient : Waking up my threads\n");
         pthread_cond_signal(&condition);
-        if ((err = pthread_mutex_unlock(&connectMtx))) {
-            exit(1);
-        }
+        pthread_mutex_unlock(&connectMutex);
 
         for (int j = 0; j < numThreads; j++) {
             if(k < i){
-                //printf("Waiting for %d thread, k : %d\n", j, k);
                 if ((err = pthread_join(*(thr + j), NULL))) {
                     printf("Invalid : pthread_join %d\n", err);
                     exit(1);
@@ -117,7 +109,9 @@ int main(int argc, char** argv){
         }
     }
 
+    pthread_mutex_lock(&printMutex);
     printf("\nOriginal thread exiting\n");
+    pthread_mutex_unlock(&printMutex);
 
     for (int j = 0; j < numQuery; ++j) {
         free(queries[j]);
@@ -131,52 +125,41 @@ void *Client(void *query) {
 
     int socketFd;
     struct sockaddr_in server;
-    int position = 0, pos = 0;
-    int err;
 
     //Setup Server
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(servIP);
     server.sin_port = htons(servPort);
-    //printf("Client : Port : %d Ip : %d\n", servPort, server.sin_addr.s_addr);
 
-    if ((err = pthread_mutex_lock(&connectMtx))) {
-        exit(1);
-    }
-    //printf("Client %ld : Locked connect mutex\n", pthread_self());
-
-    //printf("Client %ld : Waiting for other thread to create\n", pthread_self());
+    pthread_mutex_lock(&connectMutex);
     if(available == 0) {
-        //printf("Thread %ld : Waiting for Condition Available %d\n", pthread_self(), available);
-        pthread_cond_wait(&condition, &connectMtx);
+        pthread_cond_wait(&condition, &connectMutex);
         available--;
     }
+
     /* open a TCP socket */
     if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("can't open stream socket");
         exit(1);
     }
 
-    //printf("Client %ld : Waiting to connect to server\n", pthread_self());
-    //###################### condition variable needed here ###############################//
-    //sleep(2);
+    sleep(1);
+
     /* connect to the server */
     if ((connect(socketFd, (struct sockaddr *) &server, sizeof(server))) < 0) {
         perror("can't connect to server");
         exit(1);
     }
-
-    //pos = position;
-    //position++;
-
-    if ((err = pthread_mutex_unlock(&connectMtx))) {
-        exit(1);
-    }
+    pthread_mutex_unlock(&connectMutex);
 
     char buf[80];
     int len;
 
+    pthread_mutex_lock(&getService);
+
+    pthread_mutex_lock(&printMutex);
     printf("%s", (char *) query);
+    pthread_mutex_unlock(&printMutex);
 
     /* write a message to the server */
     char q[80];
@@ -186,29 +169,35 @@ void *Client(void *query) {
 
     int gotAnswer = 1;
 
-    do{
-        len = read(socketFd, buf, sizeof(buf));       //read Query from Server
-        if (len > 0) {
-            buf[len] = '\0';
-            if ((err = pthread_mutex_lock(&printMtx))) {
-                exit(1);
+    fd_set master;
+    FD_ZERO(&master);
+    FD_SET(socketFd, &master);
+
+    do {
+        if((select(FD_SETSIZE, &master, NULL, NULL, NULL)) < 0){ exit(1); }
+        for (int i = 0; i < FD_SETSIZE; ++i) {
+            if(FD_ISSET(i, &master)){
+                len = read(i, buf, sizeof(buf));       //read Query from Server
+                if (len > 0) {
+                    buf[len] = '\0';
+                    pthread_mutex_lock(&printMutex);
+                    if(strcmp(buf, "Error") != 0 && strcmp(buf, "done") != 0){
+                        printf("%s\n", buf);
+                    }
+                    pthread_mutex_unlock(&printMutex);
+
+                    if(strcmp(buf, "done") == 0){
+                        gotAnswer = 0;
+                    }
+                    bzero(buf, sizeof(buf));
+                } else{
+                    close(i);
+                    FD_CLR(i, &master);
+                }
             }
-            if(strcmp(buf, "Error") != 0 && strcmp(buf, "done") != 0){
-                printf("%s", buf);
-            }
-            if ((err = pthread_mutex_unlock(&printMtx))) {
-                exit(1);
-            }
-            if(strcmp(buf, "done") == 0){
-                gotAnswer = 0;
-            }
-            bzero(buf, sizeof(buf));
-        } else{
-            close(socketFd);
         }
-    }while ( gotAnswer );
+    } while (gotAnswer);
+    pthread_mutex_unlock(&getService);
 
-
-    printf("\n\nClient is exiting thread\n");
     pthread_exit(NULL);
 }
