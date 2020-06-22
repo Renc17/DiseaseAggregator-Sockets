@@ -39,6 +39,10 @@ int main(int argc, char** argv) {
         i++;
     }
     bufferSize = atoi(argv[i + 1]);
+    if(bufferSize < 80){
+        printf("Invalid value : Buffer size > 80\n");
+        return 0;
+    }
 
     i = 0;
     while (argv[i] != NULL && strcmp(argv[i], "-w") != 0) {

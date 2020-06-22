@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <signal.h>
 
 #define MAX_SIZE 80
 #define CLIENT 1
@@ -40,12 +41,18 @@ int read_write_thread_fd = 0;
 fd_set masterWorker, branchWorker;
 struct sockaddr_in worker_addr;
 
+int shutDown = 0;
+
 void Connection_handler(socketFds* fd, int pos);
 void *thread_work();
 void SetUpWorker();
+void signal_handler(int sig);
+
 
 //./whoServer –q queryPortNum -s statisticsPortNum –w numThreads –b bufferSize
 int main(int argc, char** argv){
+
+    signal(SIGINT, signal_handler);
 
     int statisticsPortNum = 0;
     int queryPortNum = 0;
@@ -214,14 +221,16 @@ int main(int argc, char** argv){
                 }
             }
         }
+        if(shutDown == 1)
+            break;
     }
 
 
-    for (i=0 ; i< numThreads ; i++)
-        if ((err = pthread_join(*(thread_pool+i), NULL))) {
+    for (i=0 ; i< numThreads ; i++) {
+        if ((err = pthread_join(*(thread_pool + i), NULL))) {
             exit(1);
         }
-    printf("all %d threads have terminated\n", numThreads);
+    }
 
     if ((err = pthread_mutex_destroy(&availableMutex))) {
         exit(1); }
@@ -232,7 +241,17 @@ int main(int argc, char** argv){
     if ((err = pthread_mutex_destroy(&printMutex))) {
         exit(1); }
 
+    if ((err = pthread_mutex_destroy(&workerCountMutex))) {
+        exit(1); }
+
+    if ((err = pthread_mutex_destroy(&workerSocketMutex))) {
+        exit(1); }
+
+    if ((err = pthread_cond_destroy(&avail))) {
+        exit(1); }
+
     free(fds);
+    free(thread_pool);
 
 }
 
@@ -301,10 +320,8 @@ void Connection_handler(socketFds* fd, int pos){
                         } else {
 
                             pthread_mutex_lock(&printMutex);
-                            if (strcmp(message, "done") == 0){
-                                printf("#############Thread %ld : HEYYYY I'M %s\n", pthread_self(), message);
-                            } else{
-                                //printf("%s", message);
+                            if (strcmp(message, "done") != 0){
+                                printf("%s", message);
                             }
                             pthread_mutex_unlock(&printMutex);
 
@@ -320,8 +337,6 @@ void Connection_handler(socketFds* fd, int pos){
         fds[pos].fd = -1;
         fds[pos].type = -1;
     } else if( fds[pos].type == CLIENT ) {
-
-        //############# SERVER CONNECT TO WORKER FOR QUERIES #################//
 
         FD_SET(fd[pos].fd, &masterWorker);
         //printf("Connection_handler : Thread %ld Communicating with whoClient fd %d position %d\n", pthread_self(), fds[pos].fd,pos);
@@ -371,6 +386,8 @@ void Connection_handler(socketFds* fd, int pos){
 }
 
 void SetUpWorker(){
+    //############# SERVER CONNECT TO WORKER FOR QUERIES #################//
+
     pthread_mutex_lock(&printMutex);
     printf("workerCount : %d\n", workerCount);
     pthread_mutex_unlock(&printMutex);
@@ -393,5 +410,13 @@ void SetUpWorker(){
             perror("can't connect to worker (Query)");
             exit(1);
         }
+    }
+}
+
+void signal_handler(int sig){
+    if(sig == SIGINT){
+        signal(SIGINT, signal_handler);
+        printf("Worker got users SIGINT\n");
+        shutDown = 1;
     }
 }

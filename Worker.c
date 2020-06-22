@@ -31,7 +31,7 @@ void answerQuery(char *query, char** answer);
 
 int main(int argc, char** argv) {
 
-    //signal(SIGINT, signal_handler);
+    signal(SIGINT, signal_handler);
 
     int readfd, writefd;
     int nodir = 0;
@@ -233,7 +233,6 @@ int main(int argc, char** argv) {
     memset(done, '\0', sizeof(done));
     strcpy(done, "done");
     write(serverfd, done, sizeof(done));        //write to statistics port
-    //printf("Worker : Exiting after sending done to server\n");
 
     listen(queryfd, 3);
 
@@ -264,7 +263,6 @@ int main(int argc, char** argv) {
 
                     answerQuery(query,  &ans);
 
-                    //printf("Worker %d writing answer back to server : %s\n", getpid(), ans);
                     write(i, ans, strlen(ans));        //write to Server the answer
                     bzero(query, sizeof(query));
                 }
