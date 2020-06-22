@@ -1,37 +1,23 @@
 RENA CANGA 		1115201700218
 
 DiseaseAggregator
-Communication Protocol : 
-	Στο τέλος κάθε μηνύματος ο writer γράφει &, το οποίο λέει στον reader ότι το μήνυμα τελείωσε και αυτός σπάει τη λούπα.
-	Οταν ο worker δεν έχει την απάντηση του ερωτήματος του χρήστη ή υπάρχει κάποιο λάθος γράφει στο pipe του Error και ο parent τον 	αγνοεί.
-	Τα μηνύματα πρώτα συνθέτονται από τους workers σε ένα string και μετά μεταφέρονται στον parent μέσο pipe.
+Comunication protocol:
+	Οι workers στέλνουν πρώτα το port στο οποίο περιμένουν του server για Query Solution. Μετά στέλνουν statistics και όταν τελειώσει στέλνει το string done για να πει στο server 
+	ότι τελείωσε η μετάδοση των statistics από τον συγκεκριμένο worker. Ο server αφού έχει πάρει την απάντηση από τον worker την στέλνει στον client μαζί με ένα string done για να
+	πει στο client ότι έχει στήλη την απάντηση. Όταν ο client πάρει το sign(done) αλλάζει την μεταβλητή gotAnswer σε 1 και σπάει η loop while. 
 
-Directories distribution : 
-	Αν τα Directories είναι περισσότερα από τους workers μειράζονται με Round-Robin fashion. Αν τα Directories δεν αρκούν για όλους, 		ο γονιός θα στείλει ένα μήνύμα(noDir) το οποίο θα τερματλησει τους workers αυτους και στη συνέχεια θα κλήσει τα pipes.
+Signals:
+	Οι server worker και Master κάνουν handle μόνο το SIGINT. Αν πάρουν SIGINT αλλάζουν την τιμή της global μεταβλητής shutdown σε 1, ή οποία κάνει break την ατέρμων loop των server 
+	και worker και απελευθερώνουν την μνήμη.
 
-Statistics :
-	Για κάθε αρχείο στα Directories, που έχει ανατεθεί στους workers, φτιαχνεί ένα Hashtable με βάση την ασθένεια άπο όπου μετράει 		τους ασθενείς ανά ηλικία, συνθέτει το μήνυμα και το στέλνει μέσο pipe. Διαγράφει το Hashtable όταν τελειώνει ένα αρχείο.
+Procedure:
+	Πρώτος ξεκινάει ο server ο οποίος κάνει blind τα δυο sockets (statistic, Query) και με μια select περιμένει(accept) νέες συνδέσεις. Αν τα request έρχονται από το 	statisticsSocket τότε είναι οι workers που ζητάνε να συνδεθούν για να δώσουν Statistics και το port που ακούνε, αν έρχονται από το QueryStatistics είναι whoClients. Κάθε accept το 	τοποθετούμε στο global πίνακα τύπου SocketsFds fds, το οποίο είναι ένα array από structs με ένα fd και τον τύπο του fd(WORKER ή CLIENT) ώστε να ξέρουν τα threads πως να τα 		διαχειριστούν. 	Δεύτερος ξεκινάει ο master και οι workers οι οποίοι αφότου στείλουν stats περιμένουν τον Server να συνδεθεί για την εξυπηρέτηση των Queries. Τελευταίος ο 		whoClient ο οποίος όταν φτιάχνει τα threads αυτά δεν ξεκινάνε αμέσως αλλά περιμένουν να δημιουργηθούν όλα τα threads.
 
-Database Structures : 
-	List -> κρατάει όλες τις εγγραφές των ασθενών. Πριν την πρόσθεση ενός EXIT ελέγχει αν το id υπάρχει, αλλιώς εκτυπώνει λάθος.
-		Αν υπάρχει ενημερώμει το record με το exitdate.
-	Hashtable -> (by Country και by Disease) Κάθε bucket έχει μια χώρα/ασθένεια και ένα δείκτη σε RBTree, το οποίο έχει δείκτες
-		στους ασθενείς στη λίστα. Το RBTree τα αποθηκεύει με βάση το id.
-
-Signals : 
-	Υπάρχει ένας signal handler για τον parent και ένας για κάθε worker, ο οποίος διαχειρίζεται τα σήματα που του πιάνει.
-	Αν ο worker πάρει ένα SIGINT/SIGQUIT θα φτιάξει ένα logfile και θα τερματίσει.
-	Αν ο worker πάρει ένα SIGUSR1 αλλάζει την τιμή ενός global flag, το οποίο ελέγχει το condition του update Structures. Ο χρήστης 
-	πρέπει να δώσει ENTER για να προχωρίσει η διαδικασία.
-
-	Για το τερματισμό των workers ο parent στέλνει πρώτα ένα μήνυμα το οποίο τους ενημερώνει να τελειώσουν τη δουλειά και να 		απελευθερώσουν την μνήμη. Οταν οι workers είναι έτοιμη θα στείλουν SIGKILL.
-
-	Ο parent πιάνει τα SIGINT/SIGQUIT φτιάχνει ένα logfile και στέλνει στους workers SIGKILL και τους περιμένει να τελειώσουν.
 Query : 
-	listCountries -> Διαβάζει τον πίνακα που έχει αποθηκεύσει τα Directories το συνθέτει σε ένα string με το τερματικό σύμβολο και 				το στέλνει στον parent.
-	diseaseFrequency -> Αν δοθεί Country ψάχνει στο Hashtable by Country, βρίσκει την χώρα και μετράει τους ασθενείς. Αν το Country 			= NULL ψάχνει στο Hashtable by Disease.
+	listCountries -> Διαβάζει τον πίνακα που έχει αποθηκεύσει τα Directories το συνθέτει σε ένα string με το τερματικό σύμβολο και το στέλνει στον parent.
+	diseaseFrequency -> Αν δοθεί Country ψάχνει στο Hashtable by Country, βρίσκει την χώρα και μετράει τους ασθενείς. Αν το Country = NULL ψάχνει στο Hashtable by Disease.
 	topkAgeRanges -> Ψάχνει στο Hashtable by Country βρίσκει την χώρα και μετράει τους ασθενείς από το RBT 
 	searchPatientRecord -> Διατρέχει την λίστα, αν βρεί το id το γράφει στο pipe, αλλιώς γράφει Error.
-	numPatientDischarges -> Αν δοθεί Country ψάχνει στο Hashtable by Country, βρίσκει την χώρα και μετράει τους ασθενείς που έχουν 				exitdate. Αν το Country = NULL διαβάζει όλο το Hashtable by Country και μετράει τους ασθενείς που έχουν 			exitdate για όλες τις χώρες.
+	numPatientDischarges -> Αν δοθεί Country ψάχνει στο Hashtable by Country, βρίσκει την χώρα και μετράει τους ασθενείς που έχουν exitdate. Αν το Country NULL διαβάζει όλο το 		Hashtable by Country και μετράει τους ασθενείς που έχουν 	exitdate για όλες τις χώρες.
 	numPatientAdmissions -> Same as above... αλλά μετράει τα ENTRY με την ασθένεια disease.
 	exit -> Απελευθερώνει τη μνήμη και στέλνει στον parent ένα μήνυμα ότι τελέιωσε, περιμένει ο parent να του στείλει SIGKILL

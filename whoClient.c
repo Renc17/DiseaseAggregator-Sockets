@@ -16,6 +16,7 @@ pthread_cond_t condition = PTHREAD_COND_INITIALIZER;
 //./whoClient –q queryFile -w numThreads –sp servPort –sip servIP
 
 void *Client(void *query);
+void Connection_handler(char *query, int socketfd);
 
 int numThreads = 0;
 int servPort = 0;
@@ -94,7 +95,7 @@ int main(int argc, char** argv){
         }
 
         pthread_mutex_lock(&connectMutex);
-        available++;
+        available+=i;
         pthread_cond_signal(&condition);
         pthread_mutex_unlock(&connectMutex);
 
@@ -109,15 +110,23 @@ int main(int argc, char** argv){
         }
     }
 
-    pthread_mutex_lock(&printMutex);
-    printf("\nOriginal thread exiting\n");
-    pthread_mutex_unlock(&printMutex);
-
     for (int j = 0; j < numQuery; ++j) {
         free(queries[j]);
     }
     free(queries);
     free(thr);
+
+    if ((err = pthread_mutex_destroy(&connectMutex))) {
+        exit(1); }
+
+    if ((err = pthread_mutex_destroy(&printMutex))) {
+        exit(1); }
+
+    if ((err = pthread_mutex_destroy(&getService))) {
+        exit(1); }
+
+    if ((err = pthread_cond_destroy(&condition))) {
+        exit(1); }
 
 }
 
@@ -126,7 +135,6 @@ void *Client(void *query) {
     int socketFd;
     struct sockaddr_in server;
 
-    //Setup Server
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(servIP);
     server.sin_port = htons(servPort);
@@ -134,44 +142,50 @@ void *Client(void *query) {
     pthread_mutex_lock(&connectMutex);
     if(available == 0) {
         pthread_cond_wait(&condition, &connectMutex);
-        available--;
     }
+    available--;
+    pthread_mutex_lock(&printMutex);
+    printf("Thread : %ld Available queries left %d\n", pthread_self(), available);
+    pthread_mutex_unlock(&printMutex);
 
-    /* open a TCP socket */
     if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("can't open stream socket");
         exit(1);
     }
 
-    sleep(1);
+    //sleep(1);
 
-    /* connect to the server */
     if ((connect(socketFd, (struct sockaddr *) &server, sizeof(server))) < 0) {
         perror("can't connect to server");
         exit(1);
     }
     pthread_mutex_unlock(&connectMutex);
 
-    char buf[80];
-    int len;
-
     pthread_mutex_lock(&getService);
+    Connection_handler(query, socketFd);
+    pthread_mutex_unlock(&getService);
+
+    pthread_exit(NULL);
+}
+
+void Connection_handler(char *query, int socketfd){
+    int len;
+    char buf[80];
 
     pthread_mutex_lock(&printMutex);
     printf("%s", (char *) query);
     pthread_mutex_unlock(&printMutex);
 
-    /* write a message to the server */
     char q[80];
     bzero(q, sizeof(q));
     strcpy(q, query);
-    write(socketFd, q, sizeof(q));
+    write(socketfd, q, sizeof(q));
 
     int gotAnswer = 1;
 
     fd_set master;
     FD_ZERO(&master);
-    FD_SET(socketFd, &master);
+    FD_SET(socketfd, &master);
 
     do {
         if((select(FD_SETSIZE, &master, NULL, NULL, NULL)) < 0){ exit(1); }
@@ -197,7 +211,8 @@ void *Client(void *query) {
             }
         }
     } while (gotAnswer);
-    pthread_mutex_unlock(&getService);
 
-    pthread_exit(NULL);
+    pthread_mutex_lock(&printMutex);
+    printf("Connection_handler of whoClient is exiting\n");
+    pthread_mutex_unlock(&printMutex);
 }

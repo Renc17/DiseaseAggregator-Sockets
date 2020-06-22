@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
 
     /* Setup my address */
     worker.sin_family = AF_INET;
-    worker.sin_addr.s_addr = inet_addr("127.0.0.1");
+    worker.sin_addr.s_addr = htonl(INADDR_ANY);
     worker.sin_port = htons(0);
 
     //Bind queryfd to worker address

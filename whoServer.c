@@ -123,7 +123,7 @@ int main(int argc, char** argv){
 
     bzero(&server, sizeof(server));
     server.sin_family = AF_INET;
-    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server.sin_addr.s_addr = htonl(INADDR_ANY);
     server.sin_port = htons(statisticsPortNum);
     //printf("Server : My address %d\n", server.sin_addr.s_addr);
 
@@ -273,13 +273,11 @@ void *thread_work(){
         pthread_mutex_unlock(&positionFdMutex);
 
         available--;
-        //printf("Thread %ld: I got a worker/whoClient %d, Available %d\n", pthread_self(), sockets[pos].fd, available);
 
-        //printf("\n\nThread : %ld unlocked mtx\n", pthread_self());
         pthread_mutex_unlock(&availableMutex);
 
-        //printf("Thread %ld: Calling Connection_handler for worker/whoClient %d\n", pthread_self(), sockets[pos].fd);
         Connection_handler(fds, pos);
+
     }
     pthread_exit(NULL);
 }
@@ -339,7 +337,6 @@ void Connection_handler(socketFds* fd, int pos){
     } else if( fds[pos].type == CLIENT ) {
 
         FD_SET(fd[pos].fd, &masterWorker);
-        //printf("Connection_handler : Thread %ld Communicating with whoClient fd %d position %d\n", pthread_self(), fds[pos].fd,pos);
         do {
             branchWorker = masterWorker;
             if((select(FD_SETSIZE, &branchWorker, NULL, NULL, NULL)) < 0){ return; }
