@@ -31,7 +31,7 @@ void answerQuery(char *query, char** answer);
 
 int main(int argc, char** argv) {
 
-    signal(SIGINT, signal_handler);
+    //signal(SIGINT, signal_handler);
 
     int readfd, writefd;
     int nodir = 0;

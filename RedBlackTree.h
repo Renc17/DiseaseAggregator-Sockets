@@ -34,7 +34,7 @@ void countPatientsAdmissionByDisease(RBT *root, RBT *tn, char* date1, char* date
 void countPatientsDischargeByDisease(RBT *root, RBT *tn, char* date1, char* date2, int *count, char* disease);
 void topk(RBT *Root, RBT *tn, int *array, char* date1, char* date2, int *count, char* disease);
 
-void print(RBT* root, RBT* tn, FILE *fd);
+void print(RBT* root, RBT* tn);
 void statistics(RBT *Root, RBT *tn, int *Array);
 
 void DeleteRBTree(RBT* node ,RBT* tn);

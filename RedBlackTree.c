@@ -190,13 +190,13 @@ void newEntry(RBT **root, RBT** tn, patientRecord* p, char* primaryKey){
     insertFixUp(root, z, *tn);
 }
 
-void print(RBT* root, RBT* tn, FILE *fd){
+void print(RBT* root, RBT* tn){
     if(root == tn){
         return;
     }
-    print(root->left, tn, fd);
-    fprintf(fd,"%s %s %s %s %s %s %s %s\n",root->patientNode->recordId, root->patientNode->status, root->patientNode->name, root->patientNode->surname, root->patientNode->age, root->patientNode->disease, root->patientNode->Date->entryDate, root->patientNode->Date->exitDate);
-    print(root->right, tn, fd);
+    print(root->left, tn);
+    printf("%s %s %s %s %s %s %s %s\n",root->patientNode->recordId, root->patientNode->status, root->patientNode->name, root->patientNode->surname, root->patientNode->age, root->patientNode->disease, root->patientNode->Date->entryDate, root->patientNode->Date->exitDate);
+    print(root->right, tn);
 }
 
 void countPatients(RBT *root, RBT *tn, char* date1, char* date2, int *count){
